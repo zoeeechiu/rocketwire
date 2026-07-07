@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RocketWire</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<div id="topbar">
+  <div class="tb-left">
+    <div class="logo">Rocket<em>Wire</em></div>
+    <nav class="breadcrumb" id="bc"></nav>
+  </div>
+  <div class="tb-right">
+    <div id="area-login"><button class="btn btn-ol" onclick="openM('m-login')">Log in</button></div>
+    <div id="area-user" style="display:none;align-items:center;gap:8px">
+      <div class="user-pill"><div class="odot"></div><span id="udisp">team</span></div>
+      <button class="btn btn-gh btn-sm" onclick="doLogout()">Log out</button>
+    </div>
+  </div>
+</div>
+
+<!-- HOME -->
+<div class="page" id="pg-home">
+  <div class="home-hdr">
+    <div class="home-title">Projects</div>
+    <div style="display:flex;gap:9px;align-items:center">
+      <div class="srch"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#bbb" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input type="text" placeholder="Search projects…" oninput="renderHome(this.value)"></div>
+      <button class="btn btn-red" onclick="reqAuth(()=>openM('m-newproj'))">+ New Project</button>
+    </div>
+  </div>
+  <div class="pgrid" id="pgrid"></div>
+</div>
+
+<!-- CANVAS -->
+<div class="page" id="pg-canvas">
+  <div class="cv-area">
+    <canvas id="cvs" oncontextmenu="return false"></canvas>
+    <div id="empty-hint" class="empty-hint" style="display:none"><div class="big">🚀</div><p>No systems yet — click <strong>+ Add system</strong></p></div>
+    <div class="cv-tools">
+      <button class="cv-btn" onclick="zoomBy(1.15)">＋ Zoom</button>
+      <button class="cv-btn" onclick="zoomBy(0.87)">－ Zoom</button>
+      <button class="cv-btn" onclick="fitView()">Fit view</button>
+      <button class="cv-btn" onclick="reqAuth(()=>goAdd())">+ Add system</button>
+      <button class="cv-btn" onclick="exportCSV()">CSV</button>
+      <button class="cv-btn" onclick="exportPDF()">PDF</button>
+    </div>
+    <div class="zoom-badge" id="zlbl">100%</div>
+  </div>
+  <div class="rp" id="rp">
+    <button class="rpt" id="rpt-btn" onclick="toggleRp()" title="Collapse">◀</button>
+    <div class="rpb" id="rpb">
+      <div class="rp-sec">
+        <h5>View</h5>
+        <label class="pchk"><input type="checkbox" id="v-cnum" onchange="redraw()"><span>Connector numbers</span></label>
+        <label class="pchk"><input type="checkbox" id="v-ctype" onchange="redraw()"><span>Connector types</span></label>
+        <label class="pchk"><input type="checkbox" id="v-cname" onchange="redraw()"><span>Connector names</span></label>
+        <label class="pchk"><input type="checkbox" id="v-wlen" onchange="redraw()"><span>Wire lengths</span></label>
+        <label class="pchk"><input type="checkbox" id="v-ch" onchange="redraw()"><span>All channel wires</span></label>
+      </div>
+      <div class="rp-sec">
+        <h5>Legend</h5>
+        <div class="leg-row"><div class="leg-dot"></div><span>Connector</span></div>
+        <div class="leg-row"><div class="leg-line"></div><span>Wire / harness</span></div>
+        <div class="leg-row"><div class="leg-box"></div><span>System</span></div>
+      </div>
+      <div class="rp-sec">
+        <h5>Export</h5>
+        <button class="cv-btn" style="width:100%;margin-bottom:6px" onclick="exportCSV()">Export CSV</button>
+        <button class="cv-btn" style="width:100%" onclick="exportPDF()">Export PDF</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- CONNECTOR PAGE -->
+<div class="page" id="pg-conn">
+  <div class="clp" id="clp">
+    <button class="clpt" id="clpt-btn" onclick="toggleClp()" title="Collapse">◀</button>
+    <div class="clpb" id="clpb">
+      <span class="sl" style="margin-top:0">Connector type</span>
+      <select class="sel" id="ct-type" onchange="onCtType(this.value)">
+        <option value="Amphenol 9-35">Amphenol 9-35 (6-pin)</option>
+        <option value="Amphenol 13-pin">Amphenol 13-pin</option>
+        <option value="DSUB-9">D-SUB 9</option>
+        <option value="DSUB-15">D-SUB 15</option>
+        <option value="DSUB-37">D-SUB 37</option>
+        <option value="Molex">Molex</option>
+        <option value="XT60">XT60</option>
+        <option value="XT30">XT30</option>
+        <option value="JST">JST</option>
+        <option value="Custom">Custom…</option>
+      </select>
+      <div id="ct-cname-wrap" style="display:none;margin-top:8px">
+        <span class="sl">Custom type name</span>
+        <input class="inp" id="ct-cname" placeholder="e.g. MilSpec-C" oninput="onCtCname(this.value)">
+      </div>
+      <div id="ct-pins-row">
+        <span class="sl">Pin count</span>
+        <input class="inp" type="number" id="ct-pins" min="1" max="256" value="6" onchange="onCtPins(+this.value)">
+      </div>
+      <div id="ct-grid-row" style="display:none">
+        <span class="sl">Columns</span>
+        <input class="inp" type="number" id="ct-cols" min="1" max="32" value="5" onchange="onCtGrid()">
+        <span class="sl">Rows</span>
+        <input class="inp" type="number" id="ct-rows" min="1" max="32" value="1" onchange="onCtGrid()">
+        <div style="font-size:10px;color:#aaa;margin-top:4px">Pin count = rows × columns</div>
+      </div>
+      <span class="sl">Connector name (optional)</span>
+      <input class="inp" id="ct-name" placeholder="e.g. J1, Power Bus" oninput="onCtName(this.value)" style="margin-bottom:6px">
+      <span class="sl">Connector ID</span>
+      <div id="ct-id" style="font-size:22px;font-weight:700;color:#c0392b">#1</div>
+      <div id="ct-warns" style="margin-top:10px;display:flex;flex-direction:column;gap:6px"></div>
+    </div>
+  </div>
+  <div class="conn-main">
+    <div id="conn-svg-area" style="flex-shrink:0"></div>
+    <div id="conn-connect-area" style="width:100%;max-width:560px;background:#fff;border-radius:10px;border:1px solid #e2e5ea;padding:14px 16px;margin-top:4px">
+      <div style="font-size:12px;font-weight:600;color:#555;margin-bottom:10px">Connect to existing connector</div>
+      <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap">
+        <div style="flex:1;min-width:140px">
+          <div style="font-size:10px;font-weight:600;color:#aaa;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">System</div>
+          <select class="sel" id="cc-sys" onchange="onCcSys()" style="font-size:12px;padding:6px 8px"></select>
+        </div>
+        <div style="flex:1;min-width:140px">
+          <div style="font-size:10px;font-weight:600;color:#aaa;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Connector</div>
+          <select class="sel" id="cc-conn" style="font-size:12px;padding:6px 8px"></select>
+        </div>
+        <button class="btn btn-red btn-sm" onclick="connectToExisting()">Connect</button>
+      </div>
+      <div id="cc-msg" style="font-size:11px;color:#c0392b;margin-top:6px;display:none"></div>
+    </div>
+    <div class="ch-table">
+      <div class="ch-thead"><span>Pin</span><span>Channel name</span><span>Wire color</span></div>
+      <div id="ch-list"></div>
+    </div>
+    <button class="btn btn-red" onclick="saveConn()">Save connector</button>
+  </div>
+</div>
+
+<!-- ADD SYSTEM -->
+<div class="page" id="pg-add">
+  <div class="add-lp">
+    <span class="sl" style="margin-top:0">System name</span>
+    <input class="inp" id="ns-name" placeholder="e.g. AV Bay" oninput="updPrev()">
+    <div class="sdiv"></div>
+    <button class="opt-btn" id="ob-ex" onclick="setAddMode('existing')"><span>🔗</span> Connect to existing connector</button>
+    <button class="opt-btn" id="ob-new" onclick="setAddMode('new')"><span>➕</span> Add new connector</button>
+    <div id="add-form"></div>
+    <div style="margin-top:auto;padding-top:14px">
+      <div class="sdiv" style="margin:0 0 14px"></div>
+      <button class="btn btn-red" style="width:100%" onclick="commitAdd()">Add system</button>
+    </div>
+  </div>
+  <div class="add-cv">
+    <div>
+      <div style="text-align:center;font-size:11px;color:#bbb;margin-bottom:10px">Preview</div>
+      <div class="prev-card" id="prev-card">
+        <div class="prev-name" id="prev-name">New system</div>
+        <div class="prev-dots" id="prev-dots"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODALS -->
+<div class="mbg" id="m-login" style="display:none">
+  <div class="modal"><h2>Team login</h2><div class="msub">Enter credentials to make changes.</div>
+    <div class="mf"><label>Username</label><input id="l-user" placeholder="rocketteam" onkeydown="if(event.key==='Enter')doLogin()"></div>
+    <div class="mf"><label>Password</label><input id="l-pass" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()">
+      <div class="errmsg" id="l-err">Invalid credentials.</div></div>
+    <div class="mbtns"><button class="btn btn-gh" onclick="closeM('m-login')">Cancel</button><button class="btn btn-red" onclick="doLogin()">Log in</button></div>
+  </div>
+</div>
+<div class="mbg" id="m-newproj" style="display:none">
+  <div class="modal"><h2>New project</h2><div class="msub">Start a fresh wiring project.</div>
+    <div class="mf"><label>Project name</label><input id="np-name" placeholder="e.g. 2026 Launch Vehicle" onkeydown="if(event.key==='Enter')createProj()"></div>
+    <div class="mf"><label>Description (optional)</label><input id="np-desc" placeholder="Short description"></div>
+    <div class="mbtns"><button class="btn btn-gh" onclick="closeM('m-newproj')">Cancel</button><button class="btn btn-red" onclick="createProj()">Create</button></div>
+  </div>
+</div>
+<div class="mbg" id="m-wirelen" style="display:none">
+  <div class="modal"><h2>Wire length</h2><div class="msub">Physical length of this wire run.</div>
+    <div class="mf"><label>Length (in)</label><input id="wl-val" type="number" min="0.1" step="0.1" placeholder="e.g. 18" onkeydown="if(event.key==='Enter')saveWireLen()"></div>
+    <div class="mbtns"><button class="btn btn-gh" onclick="closeM('m-wirelen')">Cancel</button><button class="btn btn-red" onclick="saveWireLen()">Save</button></div>
+  </div>
+</div>
+<div class="mbg" id="m-rename" style="display:none">
+  <div class="modal"><h2>Rename project</h2>
+    <div class="mf"><label>Name</label><input id="rp-name" onkeydown="if(event.key==='Enter')doRename()"></div>
+    <div class="mbtns"><button class="btn btn-gh" onclick="closeM('m-rename')">Cancel</button><button class="btn btn-red" onclick="doRename()">Rename</button></div>
+  </div>
+</div>
+
+<!-- SPLICE PAGE -->
+<div class="page" id="pg-splice" style="flex-direction:row">
+  <div style="width:380px;min-width:380px;flex-shrink:0;background:#fff;border-right:1px solid #e2e5ea;display:flex;flex-direction:column;overflow:hidden">
+    <div style="padding:18px 16px 10px;border-bottom:1px solid #f0f0f0;flex-shrink:0">
+      <div style="font-size:13px;font-weight:600;color:#1a1a2e;margin-bottom:3px" id="sp-title">Configure splice</div>
+      <div style="font-size:11px;color:#aaa" id="sp-subtitle"></div>
+    </div>
+    <div style="flex:1;overflow-y:auto;padding:14px 16px 20px;display:flex;flex-direction:column;gap:4px">
+      <div id="sp-from-row">
+        <span class="sl" style="margin-top:0">Stems from — choose side (inherits type &amp; pins)</span>
+        <select class="sel" id="sp-from" onchange="onSpFrom()" style="margin-bottom:4px"></select>
+      </div>
+      <span class="sl">Number of children</span>
+      <input class="inp" id="sp-nchildren" type="number" min="1" max="20" value="1" onchange="onSpNchildren(+this.value)">
+      <div id="sp-children-area"></div>
+      <div id="sp-channels-area"></div>
+    </div>
+    <div style="padding:12px 16px;border-top:1px solid #f0f0f0;flex-shrink:0">
+      <button class="btn btn-red" style="width:100%" onclick="commitSplice()">Save splice</button>
+    </div>
+  </div>
+  <div style="flex:1;display:flex;flex-direction:column;align-items:center;padding:20px;gap:12px;background:#f2f4f7;overflow-y:auto">
+    <div style="font-size:11px;color:#bbb;font-weight:500">Splice preview</div>
+    <svg id="sp-svg" width="420" height="280" style="background:#fff;border-radius:12px;border:1px solid #e2e5ea;flex-shrink:0"></svg>
+    <div id="sp-channel-summary" style="width:420px;background:#fff;border-radius:10px;border:1px solid #e2e5ea;padding:12px 14px;font-size:11px;color:#555;display:none"></div>
+  </div>
+</div>
+
+<div id="ctx"></div>
+<div id="notif"></div>
+  <script src="js/constants.js"></script>
+  <script src="js/state.js"></script>
+  <script src="js/storage.js"></script>
+  <script src="js/pages/home.js"></script>
+  <script src="js/canvas/routing.js"></script>
+  <script src="js/canvas/draw.js"></script>
+  <script src="js/canvas/events.js"></script>
+  <script src="js/splice.js"></script>
+  <script src="js/panels.js"></script>
+  <script src="js/pages/connector.js"></script>
+  <script src="js/pages/add-system.js"></script>
+  <script src="js/export.js"></script>
+</body>
+</html>
