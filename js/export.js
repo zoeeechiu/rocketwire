@@ -38,41 +38,57 @@ window.addEventListener('resize',()=>{
 // ═══════════════════════════════════════════════════════
 // BOOT
 // ═══════════════════════════════════════════════════════
-load();
-if(ST.isLoggedIn)applyLogin();
-// If we had a project open, reopen it
-if(activeProjId&&ST.projects.find(p=>p.id===activeProjId)){
-  wireChVis={};
-  const p=ST.projects.find(x=>x.id===activeProjId);
-  navStack=[{label:p.name,systems:p.systems,connectors:p.connectors,wires:p.wires,splices:p.splices||[]}];
-  goPage('pg-canvas');
-} else {
-  goPage('pg-home');
+async function boot() {
+  load(); // load from localStorage first (instant)
+
+  // Check if already signed in via Supabase session
+  const { data: { session } } = await sb.auth.getSession();
+  if (session?.user) {
+    sbUser = session.user;
+    ST.isLoggedIn = true;
+    applyLogin();
+    await loadFromCloud(); // load cloud projects
+  } else if (ST.isLoggedIn) {
+    applyLogin();
+  }
+
+  // Reopen last project
+  if (activeProjId && ST.projects.find(p => p.id === activeProjId)) {
+    wireChVis = {};
+    const p = ST.projects.find(x => x.id === activeProjId);
+    navStack = [{ label: p.name, systems: p.systems, connectors: p.connectors, wires: p.wires, splices: p.splices || [] }];
+    goPage('pg-canvas');
+  } else {
+    goPage('pg-home');
+  }
+  renderHome();
+
+  // Seed demo on first launch
+  if (!ST.projects.length) {
+    const demo = {
+      id: 'p_demo', name: '2025-2026 Launch Vehicle', desc: 'Demo project',
+      systems: [
+        {id:'s1',name:'AV Bay',x:80,y:140,w:260,h:100,systems:[{id:'s1a',name:'FWD Board',x:40,y:80,w:240,h:100,systems:[],connectors:[],wires:[],splices:[]}],connectors:[],wires:[],splices:[]},
+        {id:'s2',name:'Flight Computer',x:440,y:110,w:270,h:100,systems:[],connectors:[],wires:[],splices:[]},
+        {id:'s3',name:'Power Board',x:440,y:300,w:260,h:100,systems:[],connectors:[],wires:[],splices:[]},
+        {id:'s4',name:'Pyro Board',x:800,y:200,w:250,h:100,systems:[],connectors:[],wires:[],splices:[]},
+      ],
+      connectors: [
+        {id:'c1',systemId:'s1',type:'Amphenol 9-35',customName:'',pins:6,channels:['15V','GND','SIG1','SIG2','PWR','RTN'],colors:['red','black','yellow','yellow','red','black'],num:1},
+        {id:'c2',systemId:'s2',type:'Amphenol 9-35',customName:'',pins:6,channels:['15V','GND','SIG1','SIG2','PWR','RTN'],colors:['red','black','yellow','yellow','red','black'],num:2},
+        {id:'c3',systemId:'s3',type:'XT60',customName:'',pins:2,channels:['V+','GND'],colors:['red','black'],num:3},
+        {id:'c4',systemId:'s2',type:'XT60',customName:'',pins:2,channels:['V+','GND'],colors:['red','black'],num:4},
+        {id:'c5',systemId:'s2',type:'Molex',customName:'',pins:4,channels:['Fire1','Fire2','ARM','GND'],colors:['orange','orange','yellow','black'],num:5},
+        {id:'c6',systemId:'s4',type:'Molex',customName:'',pins:4,channels:['Fire1','Fire2','ARM','GND'],colors:['orange','orange','yellow','black'],num:6},
+      ],
+      wires: [
+        {id:'w1',fromConn:'c1',toConn:'c2',length:18},
+        {id:'w2',fromConn:'c3',toConn:'c4',length:12},
+        {id:'w3',fromConn:'c5',toConn:'c6',length:24},
+      ],
+      splices: []
+    };
+    ST.projects.push(demo); save(); renderHome();
+  }
 }
-renderHome();
-// Seed demo if first launch
-if(!ST.projects.length){
-  const demo={id:'p_demo',name:'2025-2026 Launch Vehicle',desc:'Demo project',
-    systems:[
-      {id:'s1',name:'AV Bay',x:80,y:140,w:260,h:100,systems:[{id:'s1a',name:'FWD Board',x:40,y:80,w:240,h:100,systems:[],connectors:[],wires:[],splices:[]}],connectors:[],wires:[],splices:[]},
-      {id:'s2',name:'Flight Computer',x:440,y:110,w:270,h:100,systems:[],connectors:[],wires:[],splices:[]},
-      {id:'s3',name:'Power Board',x:440,y:300,w:260,h:100,systems:[],connectors:[],wires:[],splices:[]},
-      {id:'s4',name:'Pyro Board',x:800,y:200,w:250,h:100,systems:[],connectors:[],wires:[],splices:[]},
-    ],
-    connectors:[
-      {id:'c1',systemId:'s1',type:'Amphenol 9-35',customName:'',pins:6,channels:['15V','GND','SIG1','SIG2','PWR','RTN'],colors:['red','black','yellow','yellow','red','black'],num:1},
-      {id:'c2',systemId:'s2',type:'Amphenol 9-35',customName:'',pins:6,channels:['15V','GND','SIG1','SIG2','PWR','RTN'],colors:['red','black','yellow','yellow','red','black'],num:2},
-      {id:'c3',systemId:'s3',type:'XT60',customName:'',pins:2,channels:['V+','GND'],colors:['red','black'],num:3},
-      {id:'c4',systemId:'s2',type:'XT60',customName:'',pins:2,channels:['V+','GND'],colors:['red','black'],num:4},
-      {id:'c5',systemId:'s2',type:'Molex',customName:'',pins:4,channels:['Fire1','Fire2','ARM','GND'],colors:['orange','orange','yellow','black'],num:5},
-      {id:'c6',systemId:'s4',type:'Molex',customName:'',pins:4,channels:['Fire1','Fire2','ARM','GND'],colors:['orange','orange','yellow','black'],num:6},
-    ],
-    wires:[
-      {id:'w1',fromConn:'c1',toConn:'c2',length:18},
-      {id:'w2',fromConn:'c3',toConn:'c4',length:12},
-      {id:'w3',fromConn:'c5',toConn:'c6',length:24},
-    ],
-    splices:[]
-  };
-  ST.projects.push(demo);save();renderHome();
-}
+boot();
