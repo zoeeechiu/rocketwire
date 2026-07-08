@@ -60,7 +60,7 @@ function startPolling() {
   if (_pollTimer) return;
   _pollTimer = setInterval(async () => {
     if (sbUser) await loadFromCloud();
-  }, 30000);
+  }, 10000);
 }
 function stopPolling() {
   if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }

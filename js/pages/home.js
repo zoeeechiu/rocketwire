@@ -21,14 +21,20 @@ function openProj(id){
   navStack=[{label:p.name,systems:p.systems,connectors:p.connectors,wires:p.wires,splices:p.splices||[]}];
   goPage('pg-canvas');
 }
-function createProj(){
+async function createProj(){
   const name=document.getElementById('np-name').value.trim();
   if(!name){notify('Enter a project name','err');return;}
   const p={id:'p'+Date.now(),name,desc:document.getElementById('np-desc').value.trim(),
     systems:[],connectors:[],wires:[],splices:[]};
-  ST.projects.push(p);save();saveToCloud();closeM('m-newproj');
+  ST.projects.push(p);
+  // Save locally first
+  try{localStorage.setItem('rw3',JSON.stringify(ST));}catch(e){}
+  closeM('m-newproj');
   document.getElementById('np-name').value='';document.getElementById('np-desc').value='';
-  renderHome();notify('Project created','ok');
+  renderHome();
+  // Then save to cloud immediately and wait for it
+  await saveToCloud();
+  notify('Project created','ok');
 }
 function showProjMenu(x,y,id){
   const p=ST.projects.find(x=>x.id===id);
