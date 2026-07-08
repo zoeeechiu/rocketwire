@@ -28,6 +28,7 @@
     <div style="display:flex;gap:9px;align-items:center">
       <div class="srch"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#bbb" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input type="text" placeholder="Search projects…" oninput="renderHome(this.value)"></div>
       <button class="btn btn-red" onclick="reqAuth(()=>openM('m-newproj'))">+ New Project</button>
+      <button class="btn btn-ol" onclick="reqAuth(()=>{loadFromCloud();notify('Syncing...','ok');})" title="Sync from cloud">↻ Sync</button>
     </div>
   </div>
   <div class="pgrid" id="pgrid"></div>

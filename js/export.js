@@ -48,6 +48,7 @@ async function boot() {
     ST.isLoggedIn = true;
     applyLogin();
     await loadFromCloud(); // load cloud projects
+    startPolling(); // keep in sync
   } else if (ST.isLoggedIn) {
     applyLogin();
   }

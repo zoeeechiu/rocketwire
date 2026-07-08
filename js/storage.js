@@ -38,16 +38,32 @@ async function loadFromCloud() {
   try {
     const { data, error } = await sb.from('projects').select('*').eq('user_id', sbUser.id);
     if (error || !data) return;
-    // Merge cloud projects into ST — cloud wins
+    // Merge cloud projects into ST — cloud wins for all projects
+    const cloudIds = new Set(data.map(r => r.id));
+    // Add or update cloud projects
     data.forEach(row => {
       const idx = ST.projects.findIndex(p => p.id === row.id);
       if (idx >= 0) ST.projects[idx] = row.data;
       else ST.projects.push(row.data);
     });
+    // Save merged state locally
+    try { localStorage.setItem('rw3', JSON.stringify(ST)); } catch(e) {}
     renderHome();
   } catch(e) {
     console.warn('Cloud load failed:', e);
   }
+}
+
+// Poll for changes every 30 seconds when logged in
+let _pollTimer = null;
+function startPolling() {
+  if (_pollTimer) return;
+  _pollTimer = setInterval(async () => {
+    if (sbUser) await loadFromCloud();
+  }, 30000);
+}
+function stopPolling() {
+  if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
 }
 
 function load() {
@@ -135,6 +151,7 @@ async function doLogin() {
     ST.isLoggedIn = true; save(); applyLogin();
     closeM('m-login'); notify('Logged in', 'ok');
     loadFromCloud();
+    startPolling();
     if (authCb) { authCb(); authCb = null; }
     return;
   }
@@ -165,6 +182,7 @@ function applyLogin() {
 }
 
 async function doLogout() {
+  stopPolling();
   if (sbUser) await sb.auth.signOut();
   sbUser = null;
   ST.isLoggedIn = false; save();
