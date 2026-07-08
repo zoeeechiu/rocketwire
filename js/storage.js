@@ -17,17 +17,17 @@ function save() {
 }
 
 async function saveToCloud() {
-  if (!sbUser || !activeProjId) return;
-  const proj = ST.projects.find(p => p.id === activeProjId);
-  if (!proj) return;
+  if (!sbUser || !ST.projects.length) return;
   try {
-    await sb.from('projects').upsert({
-      id: activeProjId,
+    // Save all projects so new ones are always synced
+    const rows = ST.projects.map(proj => ({
+      id: proj.id,
       user_id: sbUser.id,
       name: proj.name,
       data: proj,
       updated_at: new Date().toISOString()
-    });
+    }));
+    await sb.from('projects').upsert(rows);
   } catch(e) {
     console.warn('Cloud save failed:', e);
   }

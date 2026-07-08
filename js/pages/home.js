@@ -26,7 +26,7 @@ function createProj(){
   if(!name){notify('Enter a project name','err');return;}
   const p={id:'p'+Date.now(),name,desc:document.getElementById('np-desc').value.trim(),
     systems:[],connectors:[],wires:[],splices:[]};
-  ST.projects.push(p);save();closeM('m-newproj');
+  ST.projects.push(p);save();saveToCloud();closeM('m-newproj');
   document.getElementById('np-name').value='';document.getElementById('np-desc').value='';
   renderHome();notify('Project created','ok');
 }
