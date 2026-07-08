@@ -38,15 +38,9 @@ async function loadFromCloud() {
   try {
     const { data, error } = await sb.from('projects').select('*').eq('user_id', sbUser.id);
     if (error || !data) return;
-    // Merge cloud projects into ST — cloud wins for all projects
-    const cloudIds = new Set(data.map(r => r.id));
-    // Add or update cloud projects
-    data.forEach(row => {
-      const idx = ST.projects.findIndex(p => p.id === row.id);
-      if (idx >= 0) ST.projects[idx] = row.data;
-      else ST.projects.push(row.data);
-    });
-    // Save merged state locally
+    // REPLACE local projects entirely with cloud state
+    // This ensures deleted projects never come back from localStorage
+    ST.projects = data.map(row => row.data);
     try { localStorage.setItem('rw3', JSON.stringify(ST)); } catch(e) {}
     renderHome();
   } catch(e) {

@@ -42,7 +42,16 @@ function showProjMenu(x,y,id){
     {label:'Open',icon:'📂',fn:()=>openProj(id)},
     {label:'Rename',icon:'✏️',fn:()=>reqAuth(()=>{renameProjId=id;document.getElementById('rp-name').value=p.name;openM('m-rename');})},
     {divider:true},
-    {label:'Delete project',icon:'🗑',danger:true,fn:()=>reqAuth(()=>{if(!confirm(`Delete "${p.name}"?`))return;ST.projects=ST.projects.filter(x=>x.id!==id);save();renderHome();notify('Deleted');})}
+    {label:'Delete project',icon:'🗑',danger:true,fn:()=>reqAuth(async()=>{
+      if(!confirm(`Delete "${p.name}"?`))return;
+      ST.projects=ST.projects.filter(x=>x.id!==id);
+      try{localStorage.setItem('rw3',JSON.stringify(ST));}catch(e){}
+      renderHome();notify('Deleted');
+      // Delete from Supabase so it disappears for all users
+      if(sbUser){
+        try{await sb.from('projects').delete().eq('id',id);}catch(e){console.warn('Cloud delete failed:',e);}
+      }
+    })}
   ]);
 }
 function doRename(){
