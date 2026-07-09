@@ -5,21 +5,61 @@
 // Save current project to Supabase (debounced)
 let _saveTimer = null;
 function save() {
-  // Always keep localStorage in sync as fallback
+  // Sync navStack data back into ST.projects before saving
+  // (ensures wire drag positions, box positions etc are captured)
+  if (activeProjId) {
+    const proj = ST.projects.find(p => p.id === activeProjId);
+    if (proj && navStack.length > 0) {
+      const root = navStack[0];
+      proj.systems    = root.systems;
+      proj.connectors = root.connectors;
+      proj.wires      = root.wires;
+      proj.splices    = root.splices || [];
+    }
+  }
+
+  // Always keep localStorage in sync
   try {
     localStorage.setItem('rw3', JSON.stringify(ST));
     if (activeProjId) localStorage.setItem('rw3_proj', activeProjId);
-    // Save current page so refresh restores it
     localStorage.setItem('rw3_page', currentPage);
     localStorage.setItem('rw3_nav', JSON.stringify(
       navStack.map(sc => ({label:sc.label, sysId:sc.sysId||null}))
     ));
   } catch(e) {}
 
-  // Debounce cloud saves by 1.5s to avoid hammering the API
+  // Debounce cloud saves — 800ms is fast enough without hammering API
   if (_saveTimer) clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(saveToCloud, 1500);
+  _saveTimer = setTimeout(saveToCloud, 800);
 }
+
+// Attempt sync on page unload (best-effort)
+window.addEventListener('beforeunload', () => {
+  if (sbUser && ST.projects.length) {
+    const rows = ST.projects.map(proj => ({
+      id: proj.id, user_id: sbUser.id,
+      name: proj.name, data: proj,
+      updated_at: new Date().toISOString()
+    }));
+    // Use sendBeacon for reliable unload saves
+    const payload = JSON.stringify({ rows });
+    navigator.sendBeacon &&
+      navigator.sendBeacon(
+        `${SUPABASE_URL}/rest/v1/projects`,
+        new Blob([payload], {type:'application/json'})
+      );
+    // Also try sync XHR as fallback
+    try {
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `${SUPABASE_URL}/rest/v1/projects?on_conflict=id`, false);
+      xhr.setRequestHeader('apikey', SUPABASE_KEY);
+      xhr.setRequestHeader('Authorization', `Bearer ${SUPABASE_KEY}`);
+      xhr.setRequestHeader('Content-Type', 'application/json');
+      xhr.setRequestHeader('Prefer', 'resolution=merge-duplicates');
+      xhr.send(JSON.stringify(rows));
+    } catch(e) {}
+  }
+});
 
 async function saveToCloud() {
   if (!sbUser || !ST.projects.length) return;
@@ -43,11 +83,35 @@ async function loadFromCloud() {
   try {
     const { data, error } = await sb.from('projects').select('*').eq('user_id', sbUser.id);
     if (error || !data) return;
-    // REPLACE local projects entirely with cloud state
-    // This ensures deleted projects never come back from localStorage
+    // Replace local projects with cloud state (source of truth)
     ST.projects = data.map(row => row.data);
     try { localStorage.setItem('rw3', JSON.stringify(ST)); } catch(e) {}
-    renderHome();
+
+    // If currently viewing a project canvas, hot-reload the canvas data
+    if (activeProjId && currentPage === 'pg-canvas' && navStack.length > 0) {
+      const proj = ST.projects.find(p => p.id === activeProjId);
+      if (proj) {
+        // Update root navStack entry with fresh cloud data
+        navStack[0].systems    = proj.systems;
+        navStack[0].connectors = proj.connectors;
+        navStack[0].wires      = proj.wires;
+        navStack[0].splices    = proj.splices || [];
+        // Re-resolve subsystem references if deeper in nav
+        for (let i = 1; i < navStack.length; i++) {
+          const parentScope = navStack[i-1];
+          const sys = parentScope.systems.find(s => s.id === navStack[i].sysId);
+          if (sys) {
+            navStack[i].systems    = sys.systems;
+            navStack[i].connectors = sys.connectors;
+            navStack[i].wires      = sys.wires;
+            navStack[i].splices    = sys.splices || [];
+          }
+        }
+        redraw();
+      }
+    } else {
+      renderHome();
+    }
   } catch(e) {
     console.warn('Cloud load failed:', e);
   }
