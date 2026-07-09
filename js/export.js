@@ -53,12 +53,35 @@ async function boot() {
     applyLogin();
   }
 
-  // Reopen last project
+  // Restore last page state
+  const savedPage = localStorage.getItem('rw3_page') || 'pg-home';
   if (activeProjId && ST.projects.find(p => p.id === activeProjId)) {
     wireChVis = {};
     const p = ST.projects.find(x => x.id === activeProjId);
-    navStack = [{ label: p.name, systems: p.systems, connectors: p.connectors, wires: p.wires, splices: p.splices || [] }];
-    goPage('pg-canvas');
+    // Always rebuild root navStack entry
+    navStack = [{ label: p.name, sysId: null, systems: p.systems, connectors: p.connectors, wires: p.wires, splices: p.splices || [] }];
+    // Restore subsystem depth from saved nav
+    try {
+      const savedNav = JSON.parse(localStorage.getItem('rw3_nav') || '[]');
+      for (let i = 1; i < savedNav.length; i++) {
+        const entry = savedNav[i];
+        if (!entry.sysId) continue;
+        // Find the system in current scope
+        const cur = navStack[navStack.length - 1];
+        const sys = cur.systems ? cur.systems.find(s => s.id === entry.sysId) : null;
+        if (sys) {
+          navStack.push({
+            label: sys.name, sysId: sys.id,
+            systems: sys.systems, connectors: sys.connectors,
+            wires: sys.wires, splices: sys.splices || [],
+            parentSys: sys, parentScope: cur
+          });
+        }
+      }
+    } catch(e) {}
+    // Go to saved page if it was canvas, otherwise home
+    if (savedPage === 'pg-canvas') goPage('pg-canvas');
+    else goPage('pg-home');
   } else {
     goPage('pg-home');
   }

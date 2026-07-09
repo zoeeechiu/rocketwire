@@ -9,6 +9,11 @@ function save() {
   try {
     localStorage.setItem('rw3', JSON.stringify(ST));
     if (activeProjId) localStorage.setItem('rw3_proj', activeProjId);
+    // Save current page so refresh restores it
+    localStorage.setItem('rw3_page', currentPage);
+    localStorage.setItem('rw3_nav', JSON.stringify(
+      navStack.map(sc => ({label:sc.label, sysId:sc.sysId||null}))
+    ));
   } catch(e) {}
 
   // Debounce cloud saves by 1.5s to avoid hammering the API

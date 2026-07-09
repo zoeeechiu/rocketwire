@@ -18,7 +18,7 @@ function renderHome(filter=''){
 function openProj(id){
   activeProjId=id;wireChVis={};
   const p=ST.projects.find(x=>x.id===id);
-  navStack=[{label:p.name,systems:p.systems,connectors:p.connectors,wires:p.wires,splices:p.splices||[]}];
+  navStack=[{label:p.name,sysId:null,systems:p.systems,connectors:p.connectors,wires:p.wires,splices:p.splices||[]}];
   goPage('pg-canvas');
 }
 async function createProj(){

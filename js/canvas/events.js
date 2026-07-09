@@ -205,6 +205,7 @@ function enterSubsystem(sys){
   // Merge: subsystem scope connectors may include pass-through connectors from parent
   navStack.push({
     label:sys.name,
+    sysId:sys.id,
     systems:sys.systems,
     connectors:sys.connectors,
     wires:sys.wires,
