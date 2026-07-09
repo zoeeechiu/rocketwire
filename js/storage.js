@@ -64,18 +64,69 @@ window.addEventListener('beforeunload', () => {
 async function saveToCloud() {
   if (!sbUser || !ST.projects.length) return;
   try {
-    // Save all projects so new ones are always synced
-    const rows = ST.projects.map(proj => ({
-      id: proj.id,
-      user_id: sbUser.id,
-      name: proj.name,
-      data: proj,
-      updated_at: new Date().toISOString()
-    }));
-    await sb.from('projects').upsert(rows);
+    for (const proj of ST.projects) {
+      // Fetch current cloud version before saving to detect conflicts
+      const { data: existing } = await sb.from('projects')
+        .select('data, updated_at')
+        .eq('id', proj.id)
+        .single();
+
+      let dataToSave = proj;
+
+      if (existing && existing.data) {
+        // Merge: combine connectors, systems, wires by ID from both versions
+        // so simultaneous edits from two users don't overwrite each other
+        dataToSave = mergeProjectData(proj, existing.data);
+        // Also update our local copy with the merge result
+        const idx = ST.projects.findIndex(p => p.id === proj.id);
+        if (idx >= 0) ST.projects[idx] = dataToSave;
+        // Hot-reload canvas if open
+        if (activeProjId === proj.id && currentPage === 'pg-canvas' && navStack.length > 0) {
+          navStack[0].systems    = dataToSave.systems;
+          navStack[0].connectors = dataToSave.connectors;
+          navStack[0].wires      = dataToSave.wires;
+          navStack[0].splices    = dataToSave.splices || [];
+          redraw();
+        }
+      }
+
+      await sb.from('projects').upsert({
+        id: proj.id,
+        user_id: sbUser.id,
+        name: dataToSave.name,
+        data: dataToSave,
+        updated_at: new Date().toISOString()
+      });
+    }
   } catch(e) {
     console.warn('Cloud save failed:', e);
   }
+}
+
+// Merge two versions of a project — combine arrays by ID, local wins for conflicts
+function mergeProjectData(local, remote) {
+  function mergeById(localArr, remoteArr) {
+    const merged = [...(remoteArr || [])];
+    for (const localItem of (localArr || [])) {
+      const idx = merged.findIndex(r => r.id === localItem.id);
+      if (idx >= 0) {
+        // Both have it — local wins (user's own edit takes priority)
+        merged[idx] = localItem;
+      } else {
+        // Local has something remote doesn't — add it (new item)
+        merged.push(localItem);
+      }
+    }
+    return merged;
+  }
+
+  return {
+    ...local,
+    systems:    mergeById(local.systems,    remote.systems),
+    connectors: mergeById(local.connectors, remote.connectors),
+    wires:      mergeById(local.wires,      remote.wires),
+    splices:    mergeById(local.splices,    remote.splices),
+  };
 }
 
 async function loadFromCloud() {
