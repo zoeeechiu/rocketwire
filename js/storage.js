@@ -123,7 +123,7 @@ function startPolling() {
   if (_pollTimer) return;
   _pollTimer = setInterval(async () => {
     if (sbUser) await loadFromCloud();
-  }, 10000);
+  }, 20000);
 }
 function stopPolling() {
   if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
