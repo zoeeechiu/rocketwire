@@ -87,6 +87,8 @@ function goPage(id) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   currentPage = id;
+  // Always persist current page immediately so refresh knows where to return
+  try { localStorage.setItem('rw3_page', id); } catch(e) {}
   buildBC(id);
   if (id === 'pg-canvas') { setTimeout(initCanvas, 30); }
   if (id === 'pg-conn') { renderConnPage(); }
