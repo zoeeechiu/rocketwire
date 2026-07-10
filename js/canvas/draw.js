@@ -121,24 +121,23 @@ function redraw(){
 
       chans.forEach(({ch,col,i},drawIdx)=>{
         const off=(drawIdx-(n-1)/2)*spreadW;
-        // KEY: start and end at the SAME connector point (converge at endpoints)
-        // Only offset the bezier CONTROL POINTS to fan out in the middle
         const cpOx=perpX*off*cam.scale,cpOy=perpY*off*cam.scale;
+        const unlabeled=!ch; // grey dashed if no channel name assigned
         ctx.save();
-        ctx.strokeStyle=col;ctx.lineWidth=1.5;
+        ctx.strokeStyle=unlabeled?'#bbb':col;
+        ctx.lineWidth=1.5;
+        if(unlabeled)ctx.setLineDash([5*cam.scale,4*cam.scale]);
         ctx.beginPath();
-        // Start and end at exact connector position (no offset)
         ctx.moveTo(sA.x,sA.y);
-        // Control points are offset perpendicularly — this fans the wire out in the middle
         ctx.bezierCurveTo(
           c1.x+cpOx, c1.y+cpOy,
           c2.x+cpOx, c2.y+cpOy,
           sB.x, sB.y
         );
         ctx.stroke();
-        const chLabel=ch||`P${i+1}`; // fallback to pin number if unnamed
-        if(chLabel){
-          // Label at midpoint of this channel's bezier
+        ctx.setLineDash([]);
+        // Only show label if channel has a name
+        if(ch){
           const lx=bpt(sA.x,c1.x+cpOx,c2.x+cpOx,sB.x,0.5);
           const ly=bpt(sA.y,c1.y+cpOy,c2.y+cpOy,sB.y,0.5);
           const fs=Math.max(11,15*cam.scale);
@@ -150,7 +149,7 @@ function redraw(){
           ctx.fillStyle='rgba(255,255,255,.9)';
           ctx.fillRect(-tw/2,-fs/2-1,tw,fs+2);
           ctx.fillStyle=col;ctx.textAlign='center';ctx.textBaseline='middle';
-          ctx.fillText(chLabel,0,0);
+          ctx.fillText(ch,0,0);
         }
         ctx.restore();
       });
