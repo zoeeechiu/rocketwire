@@ -103,7 +103,30 @@ async function saveToCloud() {
   }
 }
 
-// Merge two versions of a project — combine arrays by ID, local wins for conflicts
+// Record that an item was deleted, so future merges don't resurrect it.
+// Stored on the project itself (proj.deletedIds) so it travels with save/load/merge.
+function markDeleted(ids) {
+  if (!activeProjId || !ids || !ids.length) return;
+  const proj = ST.projects.find(p => p.id === activeProjId);
+  if (!proj) return;
+  if (!proj.deletedIds) proj.deletedIds = [];
+  const now = Date.now();
+  ids.forEach(id => { if (id) proj.deletedIds.push({ id, ts: now }); });
+}
+
+// Strip any tombstoned ids out of a project's arrays, recursing into
+// nested subsystems (each system node has its own systems/connectors/wires/splices).
+function pruneDeletedTree(node, delSet) {
+  if (!node || !delSet.size) return;
+  node.systems    = (node.systems    || []).filter(s => !delSet.has(s.id));
+  node.connectors = (node.connectors || []).filter(c => !delSet.has(c.id));
+  node.wires      = (node.wires      || []).filter(w => !delSet.has(w.id));
+  node.splices    = (node.splices    || []).filter(s => !delSet.has(s.id));
+  node.systems.forEach(sys => pruneDeletedTree(sys, delSet));
+}
+
+// Merge two versions of a project — combine arrays by ID, local wins for conflicts,
+// and anything tombstoned in either version's deletedIds is removed from both.
 function mergeProjectData(local, remote) {
   function mergeById(localArr, remoteArr) {
     const merged = [...(remoteArr || [])];
@@ -120,13 +143,25 @@ function mergeProjectData(local, remote) {
     return merged;
   }
 
-  return {
+  // Union tombstones from both sides, keeping the most recent record per id
+  const delMap = new Map();
+  [...(remote.deletedIds || []), ...(local.deletedIds || [])].forEach(d => {
+    const prev = delMap.get(d.id);
+    if (!prev || d.ts > prev.ts) delMap.set(d.id, d);
+  });
+  const mergedDeletedIds = [...delMap.values()];
+  const delSet = new Set(mergedDeletedIds.map(d => d.id));
+
+  const result = {
     ...local,
     systems:    mergeById(local.systems,    remote.systems),
     connectors: mergeById(local.connectors, remote.connectors),
     wires:      mergeById(local.wires,      remote.wires),
     splices:    mergeById(local.splices,    remote.splices),
+    deletedIds: mergedDeletedIds,
   };
+  pruneDeletedTree(result, delSet);
+  return result;
 }
 
 async function loadFromCloud() {
@@ -136,6 +171,12 @@ async function loadFromCloud() {
     if (error || !data) return;
     // Replace local projects with cloud state (source of truth)
     ST.projects = data.map(row => row.data);
+    // Defensive: strip anything tombstoned, in case a stale unmerged row
+    // (e.g. from the beforeunload beacon path) slipped a deleted item back in
+    ST.projects.forEach(p => {
+      const delSet = new Set((p.deletedIds || []).map(d => d.id));
+      if (delSet.size) pruneDeletedTree(p, delSet);
+    });
     try { localStorage.setItem('rw3', JSON.stringify(ST)); } catch(e) {}
 
     // If currently viewing a project canvas, hot-reload the canvas data

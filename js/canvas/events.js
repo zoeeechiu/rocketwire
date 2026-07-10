@@ -247,8 +247,10 @@ function onCtx(e){
     });
     items.push({divider:true});
     items.push({label:'Delete connector',icon:'🗑',danger:true,fn:()=>reqAuth(()=>{
+      const wireIds=sc.wires.filter(x=>x.fromConn===conn.id||x.toConn===conn.id).map(w=>w.id);
       removeWhere(sc.connectors,c=>c.id===conn.id);
       removeWhere(sc.wires,x=>x.fromConn===conn.id||x.toConn===conn.id);
+      markDeleted([conn.id,...wireIds]);
       save();redraw();notify('Connector deleted');
     })});
     showCtx(e.clientX,e.clientY,items);return;
@@ -265,7 +267,7 @@ function onCtx(e){
       {label:'Splice wire',icon:'✂️',fn:()=>reqAuth(()=>openSplicePage(wire,w.x,w.y,false))},
       {label:'Edit connector',icon:'🔌',fn:()=>{if(cA){activeConnId=cA.id;goPage('pg-conn');}}},
       {divider:true},
-      {label:'Delete wire',icon:'🗑',danger:true,fn:()=>reqAuth(()=>{removeWhere(sc.wires,x=>x.id===wire.id);save();redraw();notify('Wire deleted');})}
+      {label:'Delete wire',icon:'🗑',danger:true,fn:()=>reqAuth(()=>{removeWhere(sc.wires,x=>x.id===wire.id);markDeleted([wire.id]);save();redraw();notify('Wire deleted');})}
     ]);return;
   }
   if(sys){
@@ -281,8 +283,12 @@ function onCtx(e){
       {divider:true},
       {label:'Delete system',icon:'🗑',danger:true,fn:()=>reqAuth(()=>{
         if(!confirm(`Delete "${sys.name}"?`))return;
+        const connIds=sc.connectors.filter(c=>c.systemId===sys.id).map(c=>c.id);
+        const wireIds=sc.wires.filter(w=>connIds.includes(w.fromConn)||connIds.includes(w.toConn)).map(w=>w.id);
         removeWhere(sc.systems,s=>s.id===sys.id);
         removeWhere(sc.connectors,c=>c.systemId===sys.id);
+        removeWhere(sc.wires,w=>connIds.includes(w.fromConn)||connIds.includes(w.toConn));
+        markDeleted([sys.id,...connIds,...wireIds]);
         save();redraw();notify('System deleted');
       })}
     ]);return;

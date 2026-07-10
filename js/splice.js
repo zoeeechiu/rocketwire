@@ -381,7 +381,9 @@ function commitSplice(){
       });
       spliceConn.usedChannelIndices=[...usedSet];
       // Remove old branch wires only, keep stem wire intact
+      const oldBranchIds=sc.wires.filter(w=>w.fromConn===spliceState.spliceConnId&&w.isBranch).map(w=>w.id);
       removeWhere(sc.wires,w=>w.fromConn===spliceState.spliceConnId&&w.isBranch);
+      markDeleted(oldBranchIds);
       // Update stem wire usedChannelIndices
       const stemWire=sc.wires.find(w=>w.toConn===spliceState.spliceConnId||w.spliceConnId===spliceState.spliceConnId);
       if(stemWire)stemWire.usedChannelIndices=[...usedSet];
@@ -404,7 +406,9 @@ function commitSplice(){
     fromConn.channelMap=channelMap;
     fromConn.stemFromId=fromId;
     // Remove the existing point-to-point wire on this connector
+    const oldWireIds=sc.wires.filter(w=>w.fromConn===fromId||w.toConn===fromId).map(w=>w.id);
     removeWhere(sc.wires,w=>w.fromConn===fromId||w.toConn===fromId);
+    markDeleted(oldWireIds);
     // Add branch wires from this connector to each child
     const added=new Set();
     for(let i=0;i<nChildren;i++){
@@ -455,6 +459,7 @@ function commitSplice(){
   // Remove original wire, replace with fromConn→splice
   // Stem wire carries only the used channels (stored on the wire for draw filtering)
   removeWhere(sc.wires,w=>w.id===wire.id);
+  markDeleted([wire.id]);
   sc.wires.push({id:'w'+Date.now(),fromConn:wire.fromConn,toConn:spliceId,length:null,
     spliceConnId:spliceId,
     usedChannelIndices:[...usedChIndices]});  // draw loop uses this to filter channels
