@@ -78,7 +78,7 @@ function renderAddForm(){
       <span class="sl">Channel names</span>
       <div id="nc-ch"></div>
     `;
-    renderNcCh();updPrev();
+    onNcType(newConnTemp.type);
   }
 }
 function refreshExConn(){
