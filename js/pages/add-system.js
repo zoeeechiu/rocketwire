@@ -163,7 +163,8 @@ function commitAdd(){
       return sel?sel.value:(newConnTemp.colors[i]||'red');
     });
     const num=sc.connectors.length+1;
-    const newConn={id:'c'+Date.now(),systemId:sysId,type,customName:cname,pins,channels,colors,num};
+    const gender=(document.getElementById('nc-gender')?.value||'Male').toLowerCase();
+    const newConn={id:'c'+Date.now(),systemId:sysId,type,customName:cname,pins,channels,colors,gender,num};
     if(['Molex','JST','Custom'].includes(type)){newConn.cols=newConnTemp.cols||5;newConn.rows=newConnTemp.rows||1;}
     sc.connectors.push(newConn);
     notify('System + connector added','ok');
@@ -173,7 +174,10 @@ function commitAdd(){
     const ex=sc.connectors.find(c=>c.id===existId);
     const num=sc.connectors.length+1;
     const ncid='c'+Date.now();
-    const newConn={id:ncid,systemId:sysId,type:ex?.type||'Amphenol 9-35',customName:ex?.customName||'',pins:ex?.pins||6,channels:[...(ex?.channels||[])],colors:[...(ex?.colors||[])],num};
+    // Mating connector gets the opposite gender, matching how connecting two
+    // connectors elsewhere in the app auto-flips gender for the mated pair
+    const gender=ex?.gender?(ex.gender==='male'?'female':'male'):'male';
+    const newConn={id:ncid,systemId:sysId,type:ex?.type||'Amphenol 9-35',customName:ex?.customName||'',pins:ex?.pins||6,channels:[...(ex?.channels||[])],colors:[...(ex?.colors||[])],gender,num};
     if(ex?.cols){newConn.cols=ex.cols;}
     if(ex?.rows){newConn.rows=ex.rows;}
     sc.connectors.push(newConn);
