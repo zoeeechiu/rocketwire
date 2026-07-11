@@ -66,12 +66,31 @@ function doRename(){
 // ═══════════════════════════════════════════════════════
 function initCanvas(){
   cv=document.getElementById('cvs');
-  const area=cv.parentElement;
-  cv.width=area.clientWidth;cv.height=area.clientHeight;
-  ctx=cv.getContext('2d');
+  sizeCanvas();
   cv.onmousedown=onMD;cv.onmousemove=onMM;cv.onmouseup=onMU;
   cv.onwheel=onWheel;cv.oncontextmenu=onCtx;cv.ondblclick=onDbl;
   fitView();
+}
+// Size the canvas backing store to the device's actual pixel density so
+// strokes/text/curves render crisp (not blurry) at any zoom level, while
+// all drawing code keeps working in CSS-pixel coordinates as before.
+//
+// IMPORTANT: <canvas> is a replaced element, so `position:absolute;inset:0`
+// does NOT stretch it to fill its container the way it would a <div> —
+// it falls back to its intrinsic size (the width/height attributes). So we
+// must explicitly pin the displayed CSS size with style.width/height,
+// separately from the (larger) backing-store resolution used for crispness.
+function sizeCanvas(){
+  if(!cv)return;
+  const area=cv.parentElement;
+  const dpr=window.devicePixelRatio||1;
+  const cssW=area.clientWidth,cssH=area.clientHeight;
+  cv.style.width=cssW+'px';
+  cv.style.height=cssH+'px';
+  cv.width=Math.round(cssW*dpr);
+  cv.height=Math.round(cssH*dpr);
+  ctx=cv.getContext('2d');
+  ctx.setTransform(dpr,0,0,dpr,0,0);
 }
 function w2s(wx,wy){return{x:wx*cam.scale+cam.x,y:wy*cam.scale+cam.y};}
 function s2w(sx,sy){return{x:(sx-cam.x)/cam.scale,y:(sy-cam.y)/cam.scale};}

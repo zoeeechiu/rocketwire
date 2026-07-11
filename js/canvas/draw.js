@@ -2,7 +2,7 @@
 // ── DRAW ──
 function redraw(){
   if(!cv||!ctx)return;
-  const cw=cv.width,ch=cv.height;
+  const cw=cv.clientWidth,ch=cv.clientHeight;
   ctx.clearRect(0,0,cw,ch);
   // Grid dots
   ctx.save();ctx.fillStyle='#d8dbe0';
@@ -104,13 +104,14 @@ function redraw(){
       const n=chansToDraw.length;
       if(n===0){
         // Branch wire with no mapped channels — draw thin gray placeholder
-        ctx.save();ctx.strokeStyle='#ddd';ctx.lineWidth=1*cam.scale;ctx.setLineDash([4,4]);
+        ctx.save();ctx.strokeStyle='#ddd';ctx.lineWidth=1*cam.scale;ctx.setLineDash([4*cam.scale,4*cam.scale]);
         ctx.beginPath();ctx.moveTo(sA.x,sA.y);ctx.bezierCurveTo(c1.x,c1.y,c2.x,c2.y,sB.x,sB.y);
         ctx.stroke();ctx.setLineDash([]);ctx.restore();
       } else {
       const chans=chansToDraw; // rename for loop below
-      // Spread in world units so it scales with zoom
-      const spreadW=18/cam.scale; // fixed 18px screen-space spread (world-adjusted)
+      // Constant spacing in WORLD units — scales with zoom like everything else,
+      // so relative spacing between channel wires is preserved exactly.
+      const spreadW=18;
       // Perpendicular direction based on the overall wire direction
       const wireAngle=Math.atan2(sB.y-sA.y,sB.x-sA.x);
       const perpX=-Math.sin(wireAngle),perpY=Math.cos(wireAngle);
@@ -125,7 +126,7 @@ function redraw(){
         const unlabeled=!ch; // grey dashed if no channel name assigned
         ctx.save();
         ctx.strokeStyle=unlabeled?'#bbb':col;
-        ctx.lineWidth=1.5;
+        ctx.lineWidth=1.5*cam.scale;
         if(unlabeled)ctx.setLineDash([5*cam.scale,4*cam.scale]);
         ctx.beginPath();
         ctx.moveTo(sA.x,sA.y);
@@ -140,7 +141,7 @@ function redraw(){
         if(ch){
           const lx=bpt(sA.x,c1.x+cpOx,c2.x+cpOx,sB.x,0.5);
           const ly=bpt(sA.y,c1.y+cpOy,c2.y+cpOy,sB.y,0.5);
-          const fs=Math.max(11,15*cam.scale);
+          const fs=15*cam.scale;
           ctx.font=`600 ${fs}px -apple-system,sans-serif`;
           const tw=ctx.measureText(ch).width+4;
           let labelAngle=tangAngle;
@@ -164,7 +165,7 @@ function redraw(){
       if(showWlen&&wire.length){
         const mx=bpt(sA.x,c1.x,c2.x,sB.x,0.5),my=bpt(sA.y,c1.y,c2.y,sB.y,0.5);
         const txt=wire.length+' in';
-        ctx.font=`${Math.max(9,10*cam.scale)}px -apple-system,sans-serif`;
+        ctx.font=`${10*cam.scale}px -apple-system,sans-serif`;
         const tw=ctx.measureText(txt).width+6;
         ctx.fillStyle='rgba(255,255,255,.92)';ctx.fillRect(mx-tw/2,my-8,tw,15);
         ctx.fillStyle='#c0392b';ctx.textAlign='center';ctx.textBaseline='middle';
@@ -194,7 +195,7 @@ function redraw(){
     ctx.strokeStyle='#334155';ctx.lineWidth=1.5*cam.scale;ctx.stroke();
     // Name
     ctx.fillStyle='#1a1a2e';
-    ctx.font=`500 ${Math.max(9,Math.round(13*cam.scale))}px -apple-system,sans-serif`;
+    ctx.font=`500 ${13*cam.scale}px -apple-system,sans-serif`;
     ctx.textAlign='center';ctx.textBaseline='middle';
     ctx.fillText(sys.name,sp.x+sw/2,sp.y+sh/2);
     // Subsystem indicator removed per user request
@@ -230,7 +231,7 @@ function drawConnectorDot(conn,sc,showCnum,showCtype){
   else if(edge==='bottom'){lx=sp.x;ly=sp.y+off;}
   else                    {lx=sp.x;ly=sp.y-off;}
 
-  const fs=Math.max(10,11*cam.scale);
+  const fs=11*cam.scale;
   const showCname=document.getElementById('v-cname')?.checked;
   let line1='',line2='',line3='';
   if(showCnum)line1='#'+conn.num;
@@ -249,7 +250,7 @@ function drawConnectorDot(conn,sc,showCnum,showCtype){
     else ctx.rect(bgX-2,bgY-1,maxW+4,totalH+2);
     ctx.fill();
     // Subtle red tint border
-    ctx.strokeStyle='rgba(192,57,43,.25)';ctx.lineWidth=0.8;ctx.stroke();
+    ctx.strokeStyle='rgba(192,57,43,.25)';ctx.lineWidth=0.8*cam.scale;ctx.stroke();
     lines.forEach((ln,i)=>{
       ctx.fillStyle='#c0392b';
       ctx.font=`700 ${fs}px -apple-system,sans-serif`;

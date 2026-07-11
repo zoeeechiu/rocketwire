@@ -31,7 +31,7 @@ function exportPDF(){
 // ═══════════════════════════════════════════════════════
 window.addEventListener('resize',()=>{
   if(currentPage==='pg-canvas'&&cv){
-    const area=cv.parentElement;cv.width=area.clientWidth;cv.height=area.clientHeight;redraw();
+    sizeCanvas();redraw();
   }
 });
 
