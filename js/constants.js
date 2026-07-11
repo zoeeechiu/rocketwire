@@ -25,14 +25,21 @@ function collectAllConnectors(node, out){
   return out;
 }
 
-// Find the single connector this one is directly wired to (each connector
-// connects to at most one other connector in this app).
+// Find the single connector this one is directly wired to via a plain
+// point-to-point wire (each connector connects to at most one other
+// connector that way). Splice stem/branch wires are deliberately excluded:
+// a splice connector's channels represent a fan-out of its stem's full
+// pinout, mapped to children via channelMap — not a 1:1 index mirror like
+// a normal wire — so mirroring names/colors across those would corrupt the
+// shared channel layout that every other child also depends on.
 function wiredCounterpart(conn){
   const sc=scope();if(!sc||!conn)return null;
-  const wire=sc.wires.find(w=>w.fromConn===conn.id||w.toConn===conn.id);
+  const wire=sc.wires.find(w=>(w.fromConn===conn.id||w.toConn===conn.id)&&!w.isBranch&&!w.spliceConnId);
   if(!wire)return null;
   const otherId=wire.fromConn===conn.id?wire.toConn:wire.fromConn;
-  return sc.connectors.find(c=>c.id===otherId)||null;
+  const other=sc.connectors.find(c=>c.id===otherId);
+  if(!other||other.isSplice||conn.isSplice)return null;
+  return other;
 }
 
 // Mirror this connector's channel names + colors (by pin index) onto the
