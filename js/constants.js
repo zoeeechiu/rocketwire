@@ -25,6 +25,33 @@ function collectAllConnectors(node, out){
   return out;
 }
 
+// Find the single connector this one is directly wired to (each connector
+// connects to at most one other connector in this app).
+function wiredCounterpart(conn){
+  const sc=scope();if(!sc||!conn)return null;
+  const wire=sc.wires.find(w=>w.fromConn===conn.id||w.toConn===conn.id);
+  if(!wire)return null;
+  const otherId=wire.fromConn===conn.id?wire.toConn:wire.fromConn;
+  return sc.connectors.find(c=>c.id===otherId)||null;
+}
+
+// Mirror this connector's channel names + colors (by pin index) onto the
+// connector it's directly wired to, so both ends of a net always show the
+// same label/color — renaming or recoloring one side keeps the other in sync.
+function syncWiredCounterpart(conn){
+  const other=wiredCounterpart(conn);
+  if(!other||!conn.channels)return;
+  if(!other.channels)other.channels=[];
+  if(!other.colors)other.colors=[];
+  const n=conn.channels.length;
+  while(other.channels.length<n)other.channels.push('');
+  while(other.colors.length<n)other.colors.push('red');
+  for(let i=0;i<n;i++){
+    other.channels[i]=conn.channels[i]||'';
+    other.colors[i]=conn.colors[i]||'red';
+  }
+}
+
 // Propagate a just-saved connector's channel colors to every other connector
 // in the project that has a channel with the same name (same "net"),
 // so a net's color stays consistent everywhere it appears.

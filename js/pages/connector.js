@@ -372,7 +372,19 @@ function connectToExisting(){
   // Check already wired
   const existing=sc.wires.find(w=>(w.fromConn===conn.id||w.toConn===conn.id));
   if(existing){if(msg){msg.textContent='This connector already has a wire. Delete it first.';msg.style.display='block';}return;}
+  const other=sc.connectors.find(c=>c.id===connSel.value);
   sc.wires.push({id:'w'+Date.now(),fromConn:conn.id,toConn:connSel.value,length:null});
+  // Auto-populate this connector's channel names + colors to match the one it's connecting to
+  if(other&&other.channels){
+    if(!conn.channels)conn.channels=[];
+    if(!conn.colors)conn.colors=[];
+    for(let i=0;i<other.channels.length&&i<conn.pins;i++){
+      if(other.channels[i]){
+        conn.channels[i]=other.channels[i];
+        conn.colors[i]=other.colors?.[i]||'red';
+      }
+    }
+  }
   save();
   if(msg){msg.textContent='Connected!';msg.style.color='#0d7a5f';msg.style.display='block';}
   renderConnPage();notify('Connected','ok');
@@ -393,6 +405,9 @@ function saveConn(){
     // Sync colors and channels, trimmed to pin count
     conn.colors=Array.from({length:conn.pins},(_,i)=>draftConn.colors[i]||'red');
     conn.channels=Array.from({length:conn.pins},(_,i)=>draftConn.channels[i]||'');
+    // Mirror channel names + colors onto the connector this one is wired to,
+    // so renaming a net here renames it on the other end too
+    syncWiredCounterpart(conn);
     // Any channel here that shares a name with a channel on another connector
     // (same net, e.g. "GND") gets its color applied everywhere that net appears
     syncNetColors(conn);
