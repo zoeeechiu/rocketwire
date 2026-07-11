@@ -360,6 +360,7 @@ function renderSpSVG(){
 }
 
 function commitSplice(){
+  if(!ST.isLoggedIn){reqAuth(commitSplice);return;}
   const sc=scope();
   if(!sc||!spliceState){notify('No splice state','err');return;}
   const fromId=document.getElementById('sp-from')?.value;
@@ -480,6 +481,7 @@ function commitSplice(){
 }
 
 function saveWireLen(){
+  if(!ST.isLoggedIn){reqAuth(saveWireLen);return;}
   const v=parseFloat(document.getElementById('wl-val').value);
   if(!v||v<=0){notify('Enter a valid length','err');return;}
   const sc=scope();

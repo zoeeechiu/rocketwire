@@ -82,9 +82,11 @@ function onMD(e){
   if(e.button===0){
     const conn=hitConn(w.x,w.y);
     if(conn&&conn.isSplice&&!conn.systemId){
+      if(!ST.isLoggedIn){reqAuth(()=>{});return;}
       drag={on:true,target:conn,isSplice:true,isWire:false,ox:w.x-(conn.x||0),oy:w.y-(conn.y||0)};
       cv.style.cursor='grabbing';
     } else if(conn&&conn.systemId){
+      if(!ST.isLoggedIn){reqAuth(()=>{});return;}
       // Drag any system connector dot — pins it to closest edge and slides along it
       if(!conn._pinnedEdge){
         // Auto-pin to current edge on first drag
@@ -110,12 +112,16 @@ function onMD(e){
         }
       }
       if(hitW){
+        if(!ST.isLoggedIn){reqAuth(()=>{});return;}
         drag={on:true,target:hitW,isSplice:false,isWire:true,ox:w.x,oy:w.y,
           startCpOx:hitW.cpOx||0,startCpOy:hitW.cpOy||0};
         cv.style.cursor='grabbing';
       } else {
         const sys=hitSys(w.x,w.y);
-        if(sys){drag={on:true,target:sys,isSplice:false,isWire:false,ox:w.x-sys.x,oy:w.y-sys.y};cv.style.cursor='grabbing';}
+        if(sys){
+          if(!ST.isLoggedIn){reqAuth(()=>{});return;}
+          drag={on:true,target:sys,isSplice:false,isWire:false,ox:w.x-sys.x,oy:w.y-sys.y};cv.style.cursor='grabbing';
+        }
       }
     }
   }
@@ -189,7 +195,7 @@ function onDbl(e){
       const eA2=connEdgePos(cA2),eB2=connEdgePos(cB2);
       const {c1:cc1,c2:cc2}=bezierCPs(eA2.x,eA2.y,eA2.edge,eB2.x,eB2.y,eB2.edge,wire,1);
       const mx=bpt(eA2.x,cc1.x,cc2.x,eB2.x,0.5),my=bpt(eA2.y,cc1.y,cc2.y,eB2.y,0.5);
-      if(Math.hypot(w.x-mx,w.y-my)<12/cam.scale){wire.cpOx=0;wire.cpOy=0;save();redraw();return;}
+      if(Math.hypot(w.x-mx,w.y-my)<12/cam.scale){reqAuth(()=>{wire.cpOx=0;wire.cpOy=0;save();redraw();});return;}
     }
   }
   const sys=hitSys(w.x,w.y);
@@ -253,11 +259,11 @@ function onCtx(e){
     items.push({divider:true});
     items.push({header:'Pin to edge'});
     ['auto','right','left','top','bottom'].forEach(e=>{
-      items.push({label:(e==='auto'?'Auto (shortest)':e.charAt(0).toUpperCase()+e.slice(1))+(curEdge===e?' ✓':''),icon:'',fn:()=>{
+      items.push({label:(e==='auto'?'Auto (shortest)':e.charAt(0).toUpperCase()+e.slice(1))+(curEdge===e?' ✓':''),icon:'',fn:()=>reqAuth(()=>{
         conn._pinnedEdge=(e==='auto'?null:e);
         conn._edge=(e==='auto'?null:e);
         save();redraw();
-      }});
+      })});
     });
     items.push({divider:true});
     items.push({label:'Delete connector',icon:'🗑',danger:true,fn:()=>reqAuth(()=>{

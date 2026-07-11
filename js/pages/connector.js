@@ -364,6 +364,7 @@ function onCcSys(){
   connSel.innerHTML=avail.map(c=>`<option value="${c.id}">#${c.num} ${c.name||c.customName||c.type}</option>`).join('')||'<option value="">None available</option>';
 }
 function connectToExisting(){
+  if(!ST.isLoggedIn){reqAuth(connectToExisting);return;}
   const sc=scope();
   const conn=sc?.connectors.find(c=>c.id===activeConnId);
   const connSel=document.getElementById('cc-conn');
@@ -391,6 +392,7 @@ function connectToExisting(){
   setTimeout(()=>{if(msg)msg.style.display='none';},2000);
 }
 function saveConn(){
+  if(!ST.isLoggedIn){reqAuth(saveConn);return;}
   const sc=scope();
   const conn=sc?.connectors.find(c=>c.id===activeConnId);
   if(conn&&draftConn){

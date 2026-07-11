@@ -22,6 +22,7 @@ function openProj(id){
   goPage('pg-canvas');
 }
 async function createProj(){
+  if(!ST.isLoggedIn){reqAuth(createProj);return;}
   const name=document.getElementById('np-name').value.trim();
   if(!name){notify('Enter a project name','err');return;}
   const p={id:'p'+Date.now(),name,desc:document.getElementById('np-desc').value.trim(),
@@ -55,6 +56,7 @@ function showProjMenu(x,y,id){
   ]);
 }
 function doRename(){
+  if(!ST.isLoggedIn){reqAuth(doRename);return;}
   const n=document.getElementById('rp-name').value.trim();if(!n)return;
   const p=ST.projects.find(x=>x.id===renameProjId);
   if(p){p.name=n;save();renderHome();buildBC(currentPage);}
