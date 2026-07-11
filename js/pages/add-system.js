@@ -68,6 +68,13 @@ function renderAddForm(){
       <div id="nc-cname-wrap" style="display:none;margin-top:6px"><input class="inp" id="nc-cname" placeholder="Custom type name"></div>
       <span class="sl">Gender</span><select class="sel" id="nc-gender"><option>Male</option><option>Female</option></select>
       <div id="nc-pins-row"><span class="sl">Pin count</span><input class="inp" id="nc-pins" type="number" value="6" min="1" max="64" onchange="onNcPins(+this.value)"></div>
+      <div id="nc-grid-row" style="display:none">
+        <span class="sl">Columns</span>
+        <input class="inp" id="nc-cols" type="number" min="1" max="32" value="5" onchange="onNcGrid()">
+        <span class="sl">Rows</span>
+        <input class="inp" id="nc-rows" type="number" min="1" max="32" value="1" onchange="onNcGrid()">
+        <div style="font-size:10px;color:#aaa;margin-top:4px">Pin count = rows × columns</div>
+      </div>
       <span class="sl">Channel names</span>
       <div id="nc-ch"></div>
     `;
@@ -95,13 +102,33 @@ function onNcType(val){
   if(!newConnTemp)return;newConnTemp.type=val;
   if(AUTO_PINS[val]!==undefined){newConnTemp.pins=AUTO_PINS[val];const e=document.getElementById('nc-pins');if(e)e.value=newConnTemp.pins;}
   document.getElementById('nc-cname-wrap').style.display=val==='Custom'?'block':'none';
-  // Hide pin count for fixed-pin connectors
-  const pr=document.getElementById('nc-pins-row');if(pr)pr.style.display=FIXED_PINS.has(val)?'none':'block';
+  // Molex/JST/Custom use a rows×cols grid instead of a flat pin count
+  const isGrid2=['Molex','JST','Custom'].includes(val);
+  const pr=document.getElementById('nc-pins-row');if(pr)pr.style.display=FIXED_PINS.has(val)?'none':(isGrid2?'none':'block');
+  const gr=document.getElementById('nc-grid-row');if(gr)gr.style.display=isGrid2?'block':'none';
+  if(isGrid2){
+    newConnTemp.cols=newConnTemp.cols||5;
+    newConnTemp.rows=newConnTemp.rows||1;
+    newConnTemp.pins=newConnTemp.cols*newConnTemp.rows;
+    const ci=document.getElementById('nc-cols');const ri=document.getElementById('nc-rows');
+    if(ci)ci.value=newConnTemp.cols;if(ri)ri.value=newConnTemp.rows;
+    const pe=document.getElementById('nc-pins');if(pe)pe.value=newConnTemp.pins;
+  }
   while(newConnTemp.channels.length<newConnTemp.pins)newConnTemp.channels.push('');
   while(newConnTemp.colors.length<newConnTemp.pins)newConnTemp.colors.push('red');
   renderNcCh();updPrev();
 }
 function onNcPins(v){if(!newConnTemp)return;newConnTemp.pins=Math.max(1,Math.min(64,v));renderNcCh();}
+function onNcGrid(){
+  if(!newConnTemp)return;
+  const cols=Math.max(1,Math.min(32,+document.getElementById('nc-cols').value||5));
+  const rows=Math.max(1,Math.min(32,+document.getElementById('nc-rows').value||1));
+  newConnTemp.cols=cols;newConnTemp.rows=rows;newConnTemp.pins=cols*rows;
+  const pe=document.getElementById('nc-pins');if(pe)pe.value=newConnTemp.pins;
+  while(newConnTemp.channels.length<newConnTemp.pins)newConnTemp.channels.push('');
+  while(newConnTemp.colors.length<newConnTemp.pins)newConnTemp.colors.push('red');
+  renderNcCh();updPrev();
+}
 function renderNcCh(){
   const box=document.getElementById('nc-ch');if(!box||!newConnTemp)return;box.innerHTML='';
   Array.from({length:Math.min(newConnTemp.pins,24)},(_,i)=>{
@@ -136,7 +163,9 @@ function commitAdd(){
       return sel?sel.value:(newConnTemp.colors[i]||'red');
     });
     const num=sc.connectors.length+1;
-    sc.connectors.push({id:'c'+Date.now(),systemId:sysId,type,customName:cname,pins,channels,colors,num});
+    const newConn={id:'c'+Date.now(),systemId:sysId,type,customName:cname,pins,channels,colors,num};
+    if(['Molex','JST','Custom'].includes(type)){newConn.cols=newConnTemp.cols||5;newConn.rows=newConnTemp.rows||1;}
+    sc.connectors.push(newConn);
     notify('System + connector added','ok');
   } else if(addMode==='existing'){
     const existId=document.getElementById('ex-conn')?.value;
@@ -144,7 +173,10 @@ function commitAdd(){
     const ex=sc.connectors.find(c=>c.id===existId);
     const num=sc.connectors.length+1;
     const ncid='c'+Date.now();
-    sc.connectors.push({id:ncid,systemId:sysId,type:ex?.type||'Amphenol 9-35',customName:ex?.customName||'',pins:ex?.pins||6,channels:[...(ex?.channels||[])],colors:[...(ex?.colors||[])],num});
+    const newConn={id:ncid,systemId:sysId,type:ex?.type||'Amphenol 9-35',customName:ex?.customName||'',pins:ex?.pins||6,channels:[...(ex?.channels||[])],colors:[...(ex?.colors||[])],num};
+    if(ex?.cols){newConn.cols=ex.cols;}
+    if(ex?.rows){newConn.rows=ex.rows;}
+    sc.connectors.push(newConn);
     sc.wires.push({id:'w'+Date.now(),fromConn:existId,toConn:ncid,length:null});
     notify('System connected','ok');
   } else {

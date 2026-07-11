@@ -215,6 +215,20 @@ function enterSubsystem(sys){
   });
   save();goPage('pg-canvas');
 }
+function renameSystem(sys){
+  const name=prompt('System name:',sys.name);
+  if(name===null)return; // cancelled
+  const trimmed=name.trim();
+  if(!trimmed){notify('Name cannot be empty','err');return;}
+  sys.name=trimmed;
+  // Keep the box wide enough for the new label (same sizing rule used on creation)
+  sys.w=Math.max(140,trimmed.length*8+20);
+  // If we're currently inside this system's subsystem view, refresh the
+  // breadcrumb entry so it doesn't show the stale name
+  const liveEntry=navStack.find(n=>n.parentSys===sys);
+  if(liveEntry)liveEntry.label=trimmed;
+  save();redraw();buildBC(currentPage);notify('System renamed','ok');
+}
 function onCtx(e){
   e.preventDefault();
   const r=cv.getBoundingClientRect();
@@ -274,6 +288,7 @@ function onCtx(e){
     showCtx(e.clientX,e.clientY,[
       {header:sys.name},
       {label:'Enter subsystem view',icon:'🔍',fn:()=>enterSubsystem(sys)},
+      {label:'Rename system',icon:'✏️',fn:()=>reqAuth(()=>renameSystem(sys))},
       {label:'Add connector',icon:'🔌',fn:()=>reqAuth(()=>{
         const num=sc.connectors.length+1;
         const cid='c'+Date.now();

@@ -297,7 +297,18 @@ function onCtType(val){
   if(AUTO_PINS[val]!==undefined){draftConn.pins=AUTO_PINS[val];document.getElementById('ct-pins').value=draftConn.pins;}
   document.getElementById('ct-cname-wrap').style.display=val==='Custom'?'block':'none';
   const prow=document.getElementById('ct-pins-row');
-  if(prow)prow.style.display=FIXED_PINS.has(val)?'none':'block';
+  const grow=document.getElementById('ct-grid-row');
+  const isGrid2=['Molex','JST','Custom'].includes(val);
+  if(prow)prow.style.display=FIXED_PINS.has(val)?'none':(isGrid2?'none':'block');
+  if(grow)grow.style.display=isGrid2?'block':'none';
+  if(isGrid2){
+    draftConn.cols=draftConn.cols||5;
+    draftConn.rows=draftConn.rows||1;
+    draftConn.pins=draftConn.cols*draftConn.rows;
+    const ci=document.getElementById('ct-cols');const ri=document.getElementById('ct-rows');
+    if(ci)ci.value=draftConn.cols;if(ri)ri.value=draftConn.rows;
+    document.getElementById('ct-pins').value=draftConn.pins;
+  }
   while(draftConn.channels.length<draftConn.pins)draftConn.channels.push('');
   while(draftConn.colors.length<draftConn.pins)draftConn.colors.push('red');
   renderConnSVG(draftConn);renderChList(draftConn);checkWarn(draftConn);
@@ -382,6 +393,9 @@ function saveConn(){
     // Sync colors and channels, trimmed to pin count
     conn.colors=Array.from({length:conn.pins},(_,i)=>draftConn.colors[i]||'red');
     conn.channels=Array.from({length:conn.pins},(_,i)=>draftConn.channels[i]||'');
+    // Any channel here that shares a name with a channel on another connector
+    // (same net, e.g. "GND") gets its color applied everywhere that net appears
+    syncNetColors(conn);
     // Auto-flip mated connector gender
     if(conn.gender){
       const wire=sc.wires.find(w=>w.fromConn===conn.id||w.toConn===conn.id);

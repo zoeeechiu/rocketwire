@@ -15,6 +15,41 @@ function removeWhere(arr, fn){
   for(let i=arr.length-1;i>=0;i--){if(fn(arr[i]))arr.splice(i,1);}
 }
 
+// Walk a project's full system tree (including nested subsystems) and
+// collect every connector, regardless of which scope it lives in.
+function collectAllConnectors(node, out){
+  out = out || [];
+  if(!node) return out;
+  (node.connectors||[]).forEach(c=>out.push(c));
+  (node.systems||[]).forEach(s=>collectAllConnectors(s,out));
+  return out;
+}
+
+// Propagate a just-saved connector's channel colors to every other connector
+// in the project that has a channel with the same name (same "net"),
+// so a net's color stays consistent everywhere it appears.
+function syncNetColors(conn){
+  if(!activeProjId||!conn||!conn.channels) return;
+  const proj=ST.projects.find(p=>p.id===activeProjId);
+  if(!proj) return;
+  const all=collectAllConnectors(proj);
+  conn.channels.forEach((name,i)=>{
+    const nm=(name||'').trim();
+    if(!nm) return;
+    const color=conn.colors[i]||'red';
+    all.forEach(other=>{
+      if(other===conn||!other.channels) return;
+      other.channels.forEach((oname,oi)=>{
+        if((oname||'').trim()===nm){
+          if(!other.colors)other.colors=[];
+          while(other.colors.length<=oi)other.colors.push('red');
+          other.colors[oi]=color;
+        }
+      });
+    });
+  });
+}
+
 // Pinout layouts
 const PINOUTS = {
   // Amphenol 9-35 (6-pin): from image — hexagonal ring + center
