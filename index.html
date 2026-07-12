@@ -145,7 +145,7 @@
 <div class="page" id="pg-add">
   <div class="add-lp">
     <span class="sl" style="margin-top:0">System name</span>
-    <input class="inp" id="ns-name" autocomplete="off" placeholder="e.g. AV Bay" oninput="updPrev()">
+    <input class="inp" id="ns-name" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" placeholder="e.g. AV Bay" oninput="updPrev()">
     <div class="sdiv"></div>
     <button class="opt-btn" id="ob-ex" onclick="setAddMode('existing')"><span>🔗</span> Connect to existing connector</button>
     <button class="opt-btn" id="ob-new" onclick="setAddMode('new')"><span>➕</span> Add new connector</button>
@@ -179,7 +179,7 @@
 </div>
 <div class="mbg" id="m-newproj" style="display:none">
   <div class="modal"><h2>New project</h2><div class="msub">Start a fresh wiring project.</div>
-    <div class="mf"><label>Project name</label><input id="np-name" placeholder="e.g. 2026 Launch Vehicle" onkeydown="if(event.key==='Enter')createProj()"></div>
+    <div class="mf"><label>Project name</label><input id="np-name" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" placeholder="e.g. 2026 Launch Vehicle" onkeydown="if(event.key==='Enter')createProj()"></div>
     <div class="mf"><label>Description (optional)</label><input id="np-desc" placeholder="Short description"></div>
     <div class="mbtns"><button class="btn btn-gh" onclick="closeM('m-newproj')">Cancel</button><button class="btn btn-red" onclick="createProj()">Create</button></div>
   </div>
@@ -192,7 +192,7 @@
 </div>
 <div class="mbg" id="m-rename" style="display:none">
   <div class="modal"><h2>Rename project</h2>
-    <div class="mf"><label>Name</label><input id="rp-name" onkeydown="if(event.key==='Enter')doRename()"></div>
+    <div class="mf"><label>Name</label><input id="rp-name" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" onkeydown="if(event.key==='Enter')doRename()"></div>
     <div class="mbtns"><button class="btn btn-gh" onclick="closeM('m-rename')">Cancel</button><button class="btn btn-red" onclick="doRename()">Rename</button></div>
   </div>
 </div>
