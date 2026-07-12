@@ -113,9 +113,20 @@ function redraw(){
         const mapped=Array.isArray(mappings)?mappings:[mappings];
         const m=mapped.find(mm=>mm&&mm.connId===cB.id);
         if(!m)return;
-        const name=m.chName||cA.channels[chIdx]||'';
+        const storedName=m.chName||cA.channels[chIdx]||'';
+        let childIdx=storedName?cB.channels.indexOf(storedName):-1;
+        // If the stored name doesn't match anything on the child (e.g. the
+        // child's channel was renamed since this mapping was made), fall
+        // back to the child's own channel — if it has exactly one named
+        // channel, that's unambiguously the one this branch feeds, so use
+        // ITS current name/color instead of silently showing stale data
+        // from the splice's own (possibly outdated) copy.
+        if(childIdx<0){
+          const namedIdxs=cB.channels.reduce((a,c,i)=>{if(c)a.push(i);return a;},[]);
+          if(namedIdxs.length===1)childIdx=namedIdxs[0];
+        }
+        const name=childIdx>=0?cB.channels[childIdx]:storedName;
         if(!name)return;
-        const childIdx=cB.channels.indexOf(name);
         const col=childIdx>=0?(cB.colors[childIdx]||'red'):(cA.colors[chIdx]||'red');
         branchChansToDraw.push({ch:name,col:WHX[col]||'#c0392b',i:chIdx});
       });

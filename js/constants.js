@@ -99,6 +99,20 @@ function resyncSpliceRelationships(conn, oldChannels, oldColors){
     }
   });
   if(conn.isSplice)remapChannelMapByName(conn,oldChannels,conn.channels);
+
+  // If `conn` is a CHILD referenced by some splice's channelMap in this
+  // scope, refresh the stored chName so future branch-wire color/name
+  // lookups don't drift if this save renamed the channel.
+  sc.connectors.filter(c=>c.isSplice&&c.channelMap).forEach(splice=>{
+    splice.channelMap.forEach(mappings=>{
+      if(!Array.isArray(mappings))return;
+      mappings.forEach(m=>{
+        if(!m||m.connId!==conn.id)return;
+        const oldIdx=oldChannels.indexOf(m.chName);
+        if(oldIdx>=0&&conn.channels[oldIdx])m.chName=conn.channels[oldIdx];
+      });
+    });
+  });
 }
 
 // Find the single connector this one is directly wired to via a plain
