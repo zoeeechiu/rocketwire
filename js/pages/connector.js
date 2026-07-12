@@ -361,7 +361,7 @@ function onCcSys(){
   const wireCount={};
   sc.wires.forEach(w=>{wireCount[w.fromConn]=(wireCount[w.fromConn]||0)+1;wireCount[w.toConn]=(wireCount[w.toConn]||0)+1;});
   const avail=sc.connectors.filter(c=>c.systemId===sysId&&c.id!==conn.id&&(wireCount[c.id]||0)<1);
-  connSel.innerHTML=avail.map(c=>`<option value="${c.id}">#${c.num} ${c.name||c.customName||c.type}</option>`).join('')||'<option value="">None available</option>';
+  connSel.innerHTML=avail.map(c=>`<option value="${c.id}">#${c.num} ${connTypeLabel(c)}</option>`).join('')||'<option value="">None available</option>';
 }
 function connectToExisting(){
   if(!ST.isLoggedIn){reqAuth(connectToExisting);return;}

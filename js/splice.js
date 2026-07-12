@@ -82,7 +82,7 @@ function initSplicePage(){
       const c=sc.connectors.find(x=>x.id===cid);if(!c)return'';
       const sys=sc.systems.find(s=>s.id===c.systemId);
       const sysName=sys?sys.name:(c.isSplice?'Splice':'?');
-      return `<option value="${c.id}"${c.id===spliceState.fromConnId?' selected':''}>#${c.num} ${sysName} (${c.customName||c.type})</option>`;
+      return `<option value="${c.id}"${c.id===spliceState.fromConnId?' selected':''}>#${c.num} ${sysName} ${connTypeLabel(c)}</option>`;
     }).join('');
   }
   // If editing existing splice: pre-populate children count from existing branch wires
@@ -171,7 +171,7 @@ function refreshSpChildConn(i){
   if(!sysSel||!connSel)return;
   const sysId=sysSel.value;
   const conns=sc.connectors.filter(c=>!c.isSplice&&c.systemId===sysId);
-  connSel.innerHTML=conns.map(c=>`<option value="${c.id}">#${c.num} (${c.customName||c.type})</option>`).join('');
+  connSel.innerHTML=conns.map(c=>`<option value="${c.id}">#${c.num} ${connTypeLabel(c)}</option>`).join('');
 }
 
 // spChMappings[chIdx] = [{connId, chName}, ...] — multi-child per channel

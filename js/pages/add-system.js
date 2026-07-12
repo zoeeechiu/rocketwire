@@ -38,7 +38,7 @@ function renderAddForm(){
     // Group: system connectors and splice connectors
     const sysList=[...new Set(avail.filter(c=>!c.isSplice).map(c=>c.systemId))];
     const sysOpts=sysList.map(sid=>{const s=sc.systems.find(x=>x.id===sid);return s?`<option value="sys:${sid}">${s.name}</option>`:''}).join('');
-    const spliceOpts=avail.filter(c=>c.isSplice).map(c=>`<option value="splice:${c.id}">Splice #${c.num} (${c.customName||c.type})</option>`).join('');
+    const spliceOpts=avail.filter(c=>c.isSplice).map(c=>`<option value="splice:${c.id}">Splice #${c.num} ${connTypeLabel(c)}</option>`).join('');
     const groupOpts=(sysOpts?`<optgroup label="System connectors">${sysOpts}</optgroup>`:'')+
                     (spliceOpts?`<optgroup label="Splice connectors">${spliceOpts}</optgroup>`:'');
     form.innerHTML=`
@@ -93,10 +93,7 @@ function refreshExConn(){
     const cid=src.slice(7);avail=sc.connectors.filter(c=>c.id===cid&&(wireCount[c.id]||0)<1);
   }
   const sel=document.getElementById('ex-conn');
-  if(sel)sel.innerHTML=avail.map(c=>{
-    const label=[`#${c.num}`,c.name||'',c.customName||c.type].filter(Boolean).join(' · ');
-    return `<option value="${c.id}">${label}</option>`;
-  }).join('');
+  if(sel)sel.innerHTML=avail.map(c=>`<option value="${c.id}">#${c.num} ${connTypeLabel(c)}</option>`).join('');
 }
 function onNcType(val){
   if(!newConnTemp)return;newConnTemp.type=val;

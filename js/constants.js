@@ -10,6 +10,17 @@ const FIXED_PINS = new Set(['Amphenol 9-35','Amphenol 13-pin','XT60','XT30','DSU
 const PAD = 20; // collision padding around boxes
 const GRID = 14; // routing grid cell size (world units)
 
+// Display label for a connector in selection dropdowns: shows the
+// user-given connector name if set (e.g. "J1", "Power Bus"), else the
+// custom type label for Custom-type connectors, else the connector's
+// type wrapped in parens (so a fallback type is visually distinct from
+// an actual assigned name).
+function connTypeLabel(c){
+  if(c.name)return c.name;
+  if(c.customName)return c.customName;
+  return `(${c.type})`;
+}
+
 // Mutate array in-place (preserves references held by navStack/ST.projects)
 function removeWhere(arr, fn){
   for(let i=arr.length-1;i>=0;i--){if(fn(arr[i]))arr.splice(i,1);}
