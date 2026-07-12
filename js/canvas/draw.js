@@ -51,7 +51,12 @@ function redraw(){
         }
       }
     }
-    const showCh=wireChVis[wire.id]||showAllCh;
+    // wireChVis[wire.id] is a three-state override: undefined = follow the
+    // global "All channel wires" checkbox, true/false = force show/hide
+    // regardless of that checkbox. Using `||` here meant an explicit
+    // per-wire "hide" (false) could never win over a global "show all".
+    const wireOverride=wireChVis[wire.id];
+    const showCh=wireOverride!==undefined?wireOverride:showAllCh;
 
     // Pad both connectors' arrays
     if(!cA.colors)cA.colors=[];if(!cB.colors)cB.colors=[];
@@ -122,8 +127,9 @@ function redraw(){
       const nPins=cSrc.pins||cSrc.channels.length;
       const allChans=Array.from({length:nPins},(_,i)=>cSrc.channels[i]||'');
       const activeIdxSet=activeChIndices?new Set(activeChIndices):null;
-      const chansToDraw=branchChansToDraw!==null?branchChansToDraw:allChans.map((ch,i)=>({ch,col:WHX[cSrc.colors[i]]||'#c0392b',i}))
-        .filter(({i})=>activeIdxSet===null||activeIdxSet.has(i));
+      const chansToDraw=(branchChansToDraw!==null?branchChansToDraw:allChans.map((ch,i)=>({ch,col:WHX[cSrc.colors[i]]||'#c0392b',i}))
+        .filter(({i})=>activeIdxSet===null||activeIdxSet.has(i)))
+        .filter(({ch})=>ch); // unlabeled channels aren't drawn at all
       const n=chansToDraw.length;
       if(n===0){
         // Branch wire with no mapped channels — draw thin gray placeholder
@@ -146,11 +152,9 @@ function redraw(){
       chans.forEach(({ch,col,i},drawIdx)=>{
         const off=(drawIdx-(n-1)/2)*spreadW;
         const cpOx=perpX*off*cam.scale,cpOy=perpY*off*cam.scale;
-        const unlabeled=!ch; // grey dashed if no channel name assigned
         ctx.save();
-        ctx.strokeStyle=unlabeled?'#bbb':col;
+        ctx.strokeStyle=col;
         ctx.lineWidth=1.5*cam.scale;
-        if(unlabeled)ctx.setLineDash([5*cam.scale,4*cam.scale]);
         ctx.beginPath();
         ctx.moveTo(sA.x,sA.y);
         ctx.bezierCurveTo(
@@ -159,7 +163,6 @@ function redraw(){
           sB.x, sB.y
         );
         ctx.stroke();
-        ctx.setLineDash([]);
         // Only show label if channel has a name
         if(ch){
           const lx=bpt(sA.x,c1.x+cpOx,c2.x+cpOx,sB.x,0.5);

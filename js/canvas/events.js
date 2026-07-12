@@ -278,7 +278,9 @@ function onCtx(e){
   if(wire){
     const cA=sc.connectors.find(c=>c.id===wire.fromConn);
     const chStr=cA?.channels?.filter(Boolean).slice(0,cA.pins||99).join(', ')||'—';
-    const chOn=wireChVis[wire.id];
+    const showAllCh=document.getElementById('v-ch')?.checked;
+    const wireOverride=wireChVis[wire.id];
+    const chOn=wireOverride!==undefined?wireOverride:showAllCh;
     showCtx(e.clientX,e.clientY,[
       {header:'Wire'},
       {prop:'Length',val:wire.length?wire.length+' in':'Not set',editFn:()=>{editWireId=wire.id;document.getElementById('wl-val').value=wire.length||'';openM('m-wirelen');}},
