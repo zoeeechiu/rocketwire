@@ -83,8 +83,15 @@ async function boot() {
   }
   renderHome();
 
-  // Seed demo on first launch
-  if (!ST.projects.length) {
+  // Seed demo on first launch only. Checking just `!ST.projects.length` was
+  // wrong: it re-seeds every time the list is empty for ANY reason,
+  // including a user deliberately deleting everything (their own projects,
+  // or this demo itself) -- it would just keep coming back. A separate
+  // one-time flag in localStorage distinguishes "never launched before"
+  // from "currently has zero projects".
+  let everLaunched=false;
+  try { everLaunched = !!localStorage.getItem('rw3_seeded'); } catch(e) {}
+  if (!ST.projects.length && !everLaunched) {
     const demo = {
       id: 'p_demo', name: '2025-2026 Launch Vehicle', desc: 'Demo project',
       systems: [
@@ -110,5 +117,6 @@ async function boot() {
     };
     ST.projects.push(demo); save(); renderHome();
   }
+  try { localStorage.setItem('rw3_seeded', '1'); } catch(e) {}
 }
 boot();
