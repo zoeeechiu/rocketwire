@@ -169,8 +169,28 @@ async function loadFromCloud() {
   try {
     const { data, error } = await sb.from('projects').select('*').eq('user_id', sbUser.id);
     if (error || !data) return;
-    // Replace local projects with cloud state (source of truth)
-    ST.projects = data.map(row => row.data);
+    // Merge cloud state with local state rather than blindly overwriting it.
+    // save() debounces the actual cloud upload by ~800ms (plus network round
+    // trip), so a poll landing in that window would otherwise see a stale
+    // server copy and wipe out whatever edit is still waiting to go out --
+    // worst case for a brand-new project, which doesn't exist server-side
+    // yet at all and would simply vanish. Merging (local wins per-item,
+    // same logic as saveToCloud already uses) means an in-flight local edit
+    // is never silently dropped, while genuinely remote changes (e.g. from
+    // another device) still come through.
+    const cloudProjects = data.map(row => row.data);
+    const localById = new Map(ST.projects.map(p => [p.id, p]));
+    const merged = [];
+    const seen = new Set();
+    for (const cloudProj of cloudProjects) {
+      const localProj = localById.get(cloudProj.id);
+      merged.push(localProj ? mergeProjectData(localProj, cloudProj) : cloudProj);
+      seen.add(cloudProj.id);
+    }
+    for (const localProj of ST.projects) {
+      if (!seen.has(localProj.id)) merged.push(localProj); // local-only, not yet uploaded
+    }
+    ST.projects = merged;
     // Defensive: strip anything tombstoned, in case a stale unmerged row
     // (e.g. from the beforeunload beacon path) slipped a deleted item back in
     ST.projects.forEach(p => {
