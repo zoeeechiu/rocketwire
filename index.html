@@ -169,12 +169,14 @@
 <!-- MODALS -->
 <div class="mbg" id="m-login" style="display:none">
   <div class="modal"><h2>Team login</h2><div class="msub">Enter credentials to make changes.</div>
-    <div class="mf"><label>Username</label><input id="l-user" placeholder="rocketteam" onkeydown="if(event.key==='Enter')doLogin()"></div>
-    <div class="mf"><label>Password</label><input id="l-pass" type="password" placeholder="••••••••" onkeydown="if(event.key==='Enter')doLogin()">
+    <form autocomplete="on" onsubmit="doLogin();return false;">
+    <div class="mf"><label>Username</label><input id="l-user" name="username" autocomplete="username" placeholder="rocketteam"></div>
+    <div class="mf"><label>Password</label><input id="l-pass" name="password" type="password" autocomplete="current-password" placeholder="••••••••">
       <div class="errmsg" id="l-err">Invalid credentials.</div></div>
-    <div class="mbtns"><button class="btn btn-gh" onclick="closeM('m-login')">Cancel</button><button class="btn btn-red" onclick="doLogin()">Log in</button>
-      <button class="btn btn-ol" style="width:100%;margin-top:8px" onclick="doSignup()">Create account</button>
+    <div class="mbtns"><button type="button" class="btn btn-gh" onclick="closeM('m-login')">Cancel</button><button type="submit" class="btn btn-red">Log in</button>
+      <button type="button" class="btn btn-ol" style="width:100%;margin-top:8px" onclick="doSignup()">Create account</button>
       <div style="font-size:11px;color:#aaa;text-align:center;margin-top:8px">Or use team login: <b>rocketteam</b></div></div>
+    </form>
   </div>
 </div>
 <div class="mbg" id="m-newproj" style="display:none">

@@ -260,7 +260,7 @@ function renderChList(conn){
   conn.channels.slice(0,n).forEach((ch,i)=>{
     const row=document.createElement('div');row.className='ch-row';
     row.innerHTML=`<div class="pnum">${i+1}</div>
-      <input class="chinp" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" value="${ch}" placeholder="e.g. GND" data-i="${i}">
+      <input class="chinp" name="ch-name-${i}" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" value="${ch}" placeholder="e.g. GND" data-i="${i}">
       <select class="colsel" data-i="${i}">${WC.map(c=>`<option value="${c}"${conn.colors[i]===c?' selected':''} style="background:${WHX[c]||'#fff'};color:${['black','purple','blue'].includes(c)?'#fff':'#222'}">${c}</option>`).join('')}</select>`;
     row.querySelector('input').onchange=e=>{if(draftConn)draftConn.channels[+e.target.dataset.i]=e.target.value;checkWarn(draftConn||conn);};
     const sel=row.querySelector('select');

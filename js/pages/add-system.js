@@ -130,7 +130,7 @@ function renderNcCh(){
   const box=document.getElementById('nc-ch');if(!box||!newConnTemp)return;box.innerHTML='';
   Array.from({length:Math.min(newConnTemp.pins,24)},(_,i)=>{
     const row=document.createElement('div');row.className='chmini';
-    row.innerHTML=`<span class="pb">${i+1}</span><input autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" placeholder="e.g. GND" value="${newConnTemp.channels[i]||''}"><select>${WC.map(c=>`<option value="${c}"${newConnTemp.colors[i]===c?' selected':''}>${c}</option>`).join('')}</select>`;
+    row.innerHTML=`<span class="pb">${i+1}</span><input name="new-ch-name-${i}" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" placeholder="e.g. GND" value="${newConnTemp.channels[i]||''}"><select>${WC.map(c=>`<option value="${c}"${newConnTemp.colors[i]===c?' selected':''}>${c}</option>`).join('')}</select>`;
     row.querySelector('input').onchange=e=>{newConnTemp.channels[i]=e.target.value;};
     row.querySelector('select').onchange=e=>{newConnTemp.colors[i]=e.target.value;};
     box.appendChild(row);
