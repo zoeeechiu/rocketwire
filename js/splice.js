@@ -53,6 +53,24 @@ function initSplicePage(){
   const fromRow=document.getElementById('sp-from-row');
   if(fromRow)fromRow.style.display=isEdit?'none':'block';
 
+  // "Different connector type" option only applies when creating a brand-new
+  // splice by cutting into a wire — not when converting an existing connector
+  // into a splice (it already IS a specific connector), and not when editing
+  // an existing splice's children (changing its type after the fact would
+  // require migrating channelMap, which is out of scope here).
+  const diffRow=document.getElementById('sp-difftype-row');
+  const diffForm=document.getElementById('sp-conn-type-form');
+  if(isEdit){
+    if(diffRow)diffRow.style.display='none';
+    if(diffForm)diffForm.style.display='none';
+  } else {
+    if(diffRow)diffRow.style.display='block';
+    spConnTemp=null;
+    const chk=document.getElementById('sp-diff-type');
+    if(chk)chk.checked=false;
+    if(diffForm)diffForm.style.display='none';
+  }
+
   const fromSel=document.getElementById('sp-from');
   if(isEdit){
     // Convert mode: stem is the connector itself — no choice
@@ -99,6 +117,7 @@ function initSplicePage(){
 function onSpFrom(){
   const val=document.getElementById('sp-from')?.value;
   if(val&&spliceState)spliceState.fromConnId=val;
+  if(spConnTemp)renderSptCh(); // stem-channel dropdown options depend on which side is the stem
   renderSpSVG();
 }
 
@@ -159,26 +178,136 @@ function refreshSpChildConn(i){
 let spChMappings = [];
 let spChildren = []; // [{sysId, connId}] — persists across renderSpChildren calls
 
+// If set, the splice connector being created uses THIS pinout (type, gender,
+// pins/cols/rows, per-pin stem-channel mapping) instead of mirroring the
+// stem connector 1:1. Null means "same as stem" (the original/default
+// behavior). stemMap[pinIdx] = index into the STEM connector's channels
+// that this splice pin is wired to (or null if this pin is unused) — the
+// pin's name/color are inherited directly from that stem channel.
+let spConnTemp = null;
+
+function onSpDiffType(checked){
+  const form=document.getElementById('sp-conn-type-form');
+  if(checked){
+    spConnTemp=spConnTemp||{type:'Amphenol 9-35',pins:6,channels:Array(6).fill(''),colors:Array(6).fill('red'),gender:'male',stemMap:Array(6).fill(null)};
+    if(form)form.style.display='block';
+    document.getElementById('spt-type').value=spConnTemp.type;
+    document.getElementById('spt-gender').value=spConnTemp.gender==='female'?'Female':'Male';
+    onSptType(spConnTemp.type);
+  } else {
+    spConnTemp=null;
+    if(form)form.style.display='none';
+    renderSpChannels();
+  }
+}
+function onSptType(val){
+  if(!spConnTemp)return;spConnTemp.type=val;
+  if(AUTO_PINS[val]!==undefined){spConnTemp.pins=AUTO_PINS[val];const e=document.getElementById('spt-pins');if(e)e.value=spConnTemp.pins;}
+  document.getElementById('spt-cname-wrap').style.display=val==='Custom'?'block':'none';
+  const isGrid2=['Molex','JST','Custom'].includes(val);
+  const pr=document.getElementById('spt-pins-row');if(pr)pr.style.display=FIXED_PINS.has(val)?'none':(isGrid2?'none':'block');
+  const gr=document.getElementById('spt-grid-row');if(gr)gr.style.display=isGrid2?'block':'none';
+  if(isGrid2){
+    spConnTemp.cols=spConnTemp.cols||5;
+    spConnTemp.rows=spConnTemp.rows||1;
+    spConnTemp.pins=spConnTemp.cols*spConnTemp.rows;
+    const ci=document.getElementById('spt-cols');const ri=document.getElementById('spt-rows');
+    if(ci)ci.value=spConnTemp.cols;if(ri)ri.value=spConnTemp.rows;
+    const pe=document.getElementById('spt-pins');if(pe)pe.value=spConnTemp.pins;
+  }
+  while(spConnTemp.channels.length<spConnTemp.pins)spConnTemp.channels.push('');
+  while(spConnTemp.colors.length<spConnTemp.pins)spConnTemp.colors.push('red');
+  if(!spConnTemp.stemMap)spConnTemp.stemMap=[];
+  while(spConnTemp.stemMap.length<spConnTemp.pins)spConnTemp.stemMap.push(null);
+  renderSptCh();renderSpChannels();
+}
+function onSptPins(v){
+  if(!spConnTemp)return;spConnTemp.pins=Math.max(1,Math.min(64,v));
+  while(spConnTemp.channels.length<spConnTemp.pins)spConnTemp.channels.push('');
+  while(spConnTemp.colors.length<spConnTemp.pins)spConnTemp.colors.push('red');
+  if(!spConnTemp.stemMap)spConnTemp.stemMap=[];
+  while(spConnTemp.stemMap.length<spConnTemp.pins)spConnTemp.stemMap.push(null);
+  renderSptCh();renderSpChannels();
+}
+function onSptGrid(){
+  if(!spConnTemp)return;
+  const cols=Math.max(1,Math.min(32,+document.getElementById('spt-cols').value||5));
+  const rows=Math.max(1,Math.min(32,+document.getElementById('spt-rows').value||1));
+  spConnTemp.cols=cols;spConnTemp.rows=rows;spConnTemp.pins=cols*rows;
+  const pe=document.getElementById('spt-pins');if(pe)pe.value=spConnTemp.pins;
+  while(spConnTemp.channels.length<spConnTemp.pins)spConnTemp.channels.push('');
+  while(spConnTemp.colors.length<spConnTemp.pins)spConnTemp.colors.push('red');
+  if(!spConnTemp.stemMap)spConnTemp.stemMap=[];
+  while(spConnTemp.stemMap.length<spConnTemp.pins)spConnTemp.stemMap.push(null);
+  renderSptCh();renderSpChannels();
+}
+function onSptGender(val){if(spConnTemp)spConnTemp.gender=val==='Female'?'female':'male';}
+
+// For each pin of the custom splice type, show a dropdown of the STEM
+// connector's channels instead of free-text entry. Picking one wires that
+// pin to the stem channel and inherits its name + color directly, so the
+// connection between stem and splice is explicit rather than name-typed.
+function renderSptCh(){
+  const box=document.getElementById('spt-ch');if(!box||!spConnTemp)return;box.innerHTML='';
+  const sc=scope();
+  const fromId=document.getElementById('sp-from')?.value;
+  const fromConn=fromId&&sc?sc.connectors.find(c=>c.id===fromId):null;
+  const stemOpts=fromConn
+    ? fromConn.channels.slice(0,fromConn.pins).map((c,idx)=>`<option value="${idx}">${idx+1}: ${c||'(unnamed)'}</option>`).join('')
+    : '';
+  Array.from({length:Math.min(spConnTemp.pins,24)},(_,i)=>{
+    const row=document.createElement('div');row.className='chmini';
+    const badge=document.createElement('span');badge.className='pb';badge.textContent=i+1;
+    const sel=document.createElement('select');
+    sel.style.flex='1';
+    sel.innerHTML='<option value="">— unused —</option>'+stemOpts;
+    const cur=spConnTemp.stemMap?.[i];
+    if(cur!==null&&cur!==undefined){
+      const opt=[...sel.options].find(o=>o.value===String(cur));
+      if(opt)opt.selected=true;
+    }
+    sel.onchange=()=>{
+      if(sel.value===''){
+        spConnTemp.stemMap[i]=null;
+        spConnTemp.channels[i]='';
+        spConnTemp.colors[i]='red';
+      } else {
+        const stemIdx=+sel.value;
+        spConnTemp.stemMap[i]=stemIdx;
+        spConnTemp.channels[i]=fromConn?.channels[stemIdx]||'';
+        spConnTemp.colors[i]=fromConn?.colors[stemIdx]||'red';
+      }
+      renderSpChannels();
+    };
+    row.appendChild(badge);row.appendChild(sel);
+    box.appendChild(row);
+  });
+}
+
 function renderSpChannels(){
   const sc=scope();
   const fromId=document.getElementById('sp-from')?.value;
   const fromConn=sc.connectors.find(c=>c.id===fromId);
   if(!fromConn)return;
-  const n=fromConn.pins;
+  // If a different splice-connector type was chosen, channel routing is
+  // based on ITS pinout, not the stem's — otherwise it mirrors the stem.
+  const srcPins=spConnTemp?spConnTemp.pins:fromConn.pins;
+  const srcChannels=spConnTemp?spConnTemp.channels:fromConn.channels;
+  const n=srcPins;
   const nChildren=+document.getElementById('sp-nchildren')?.value||1;
   const area=document.getElementById('sp-channels-area');
   area.innerHTML='';
 
   // Init mappings if needed
   if(spChMappings.length!==n){
-    spChMappings=fromConn.channels.slice(0,n).map(()=>[{connId:'',chName:''}]);
+    spChMappings=Array.from({length:n},()=>[{connId:'',chName:''}]);
   }
 
   const hdr=document.createElement('div');hdr.className='sp-sect-hdr';
   hdr.textContent=`Channel routing (${n} channels)`;
   area.appendChild(hdr);
 
-  fromConn.channels.slice(0,n).forEach((ch,chIdx)=>{
+  Array.from({length:n},(_,i)=>srcChannels[i]||'').forEach((ch,chIdx)=>{
     const block=document.createElement('div');
     block.style.cssText='background:#fafafa;border:1px solid #eee;border-radius:8px;padding:8px 10px;margin-bottom:8px';
     block.id=`sp-ch-block-${chIdx}`;
@@ -278,8 +407,9 @@ function renderSpChSummary(){
   const fromId=document.getElementById('sp-from')?.value;
   const fromConn=sc.connectors.find(c=>c.id===fromId);
   if(!fromConn||!spChMappings.length){box.style.display='none';return;}
+  const srcChannels=spConnTemp?spConnTemp.channels:fromConn.channels;
   const lines=spChMappings.map((mappings,i)=>{
-    const ch=fromConn.channels[i]||`Ch${i+1}`;
+    const ch=srcChannels[i]||`Ch${i+1}`;
     const targets=mappings.filter(m=>m.connId).map(m=>{
       const conn=sc.connectors.find(c=>c.id===m.connId);
       const sys=conn?sc.systems.find(s=>s.id===conn.systemId):null;
@@ -441,7 +571,8 @@ function commitSplice(){
     spliceY=bpt(eA.y,c1.y,c2.y,eB.y,t);
   }
 
-  // Compute which channel indices are actually needed by any child
+  // Compute which SPLICE PIN indices are actually routed to a child
+  // (informational — stored on the splice connector itself)
   const usedChIndices=new Set();
   channelMap.forEach((mappings,chIdx)=>{
     const hasMapped=Array.isArray(mappings)?mappings.some(m=>m&&m.connId):false;
@@ -450,20 +581,42 @@ function commitSplice(){
 
   const spliceId='c'+Date.now();
   const num=sc.connectors.length+1;
+  const useCustomType=!!spConnTemp;
+
+  // Which STEM channel indices are actually tapped by this splice — needed
+  // for the stem wire's usedChannelIndices, which must reference stem-side
+  // indices (that's what the stem wire's rendering filters against). A
+  // same-type splice mirrors the stem 1:1, so splice-pin index === stem
+  // index; a custom-type splice needs the explicit per-pin stemMap instead.
+  const stemUsedIndices=useCustomType
+    ? new Set((spConnTemp.stemMap||[]).filter(v=>v!==null&&v!==undefined))
+    : usedChIndices;
+
   const splice={id:spliceId,isSplice:true,x:spliceX,y:spliceY,
-    type:fromConn.type,customName:fromConn.customName||fromConn.type,
-    pins:fromConn.pins,channels:[...fromConn.channels],colors:[...fromConn.colors],
+    type: useCustomType?spConnTemp.type:fromConn.type,
+    customName: useCustomType?(document.getElementById('spt-cname')?.value||spConnTemp.type):(fromConn.customName||fromConn.type),
+    gender: useCustomType?spConnTemp.gender:fromConn.gender,
+    pins: useCustomType?spConnTemp.pins:fromConn.pins,
+    channels: useCustomType?Array.from({length:spConnTemp.pins},(_,i)=>spConnTemp.channels[i]||''):[...fromConn.channels],
+    colors: useCustomType?Array.from({length:spConnTemp.pins},(_,i)=>spConnTemp.colors[i]||'red'):[...fromConn.colors],
     num,channelMap,stemFromId:fromId,
-    usedChannelIndices:[...usedChIndices]};  // which channels flow into this splice
+    usedChannelIndices:[...usedChIndices]};  // which SPLICE pins flow out to a child
+  if(useCustomType){
+    // splice pin index -> stem channel index (or null if that pin is unused)
+    splice.stemChannelMap=Array.from({length:spConnTemp.pins},(_,i)=>spConnTemp.stemMap?.[i]??null);
+    if(['Molex','JST','Custom'].includes(spConnTemp.type)){
+      splice.cols=spConnTemp.cols;splice.rows=spConnTemp.rows;
+    }
+  }
   sc.connectors.push(splice);
 
   // Remove original wire, replace with fromConn→splice
-  // Stem wire carries only the used channels (stored on the wire for draw filtering)
+  // Stem wire carries only the stem channels actually tapped by this splice
   removeWhere(sc.wires,w=>w.id===wire.id);
   markDeleted([wire.id]);
   sc.wires.push({id:'w'+Date.now(),fromConn:wire.fromConn,toConn:spliceId,length:null,
     spliceConnId:spliceId,
-    usedChannelIndices:[...usedChIndices]});  // draw loop uses this to filter channels
+    usedChannelIndices:[...stemUsedIndices]});  // draw loop uses this to filter channels (stem-side indices)
 
   // Branch wires from splice to each child
   const added=new Set();
@@ -475,8 +628,7 @@ function commitSplice(){
     }
   }
 
-  spChMappings=[];spChildren=[];
-  save();notify('Splice created — connector #'+num,'ok');
+  spChMappings=[];spChildren=[];spConnTemp=null;
   goPage('pg-canvas');
 }
 

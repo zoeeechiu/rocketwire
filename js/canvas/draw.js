@@ -64,23 +64,35 @@ function redraw(){
     // Build merged source: for each pin index, pick the connector that has
     // a named channel OR a non-red color. cA (fromConn) is the default.
     // This way EITHER connector's edits are always reflected.
-    const nPinsMerge=Math.max(nPinsA,nPinsB,cA.pins||0,cB.pins||0);
-    const mergedChannels=Array.from({length:nPinsMerge},(_,i)=>{
-      const ca=cA.channels[i]||'', cb=cB.channels[i]||'';
-      return ca||cb;
-    });
-    // For each pin: take cA color if set non-red, else cB color if set non-red, else red
-    // Result: EITHER connector's color edits are always visible
-    const mergedColors=Array.from({length:nPinsMerge},(_,i)=>{
-      const ca=cA.colors[i]||'red';
-      const cb=cB.colors[i]||'red';
-      if(ca!=='red')return ca;
-      if(cb!=='red')return cb;
-      return 'red';
-    });
-    // cSrc is a virtual object with merged data
-    const cSrc={pins:nPinsMerge,channels:mergedChannels,colors:mergedColors,
-                isSplice:cA.isSplice,systemId:cA.systemId,channelMap:cA.channelMap};
+    let cSrc,nPinsMerge;
+    if(cB.isSplice&&Array.isArray(cB.stemChannelMap)){
+      // Stem wire feeding a splice that uses a DIFFERENT connector type than
+      // its stem: splice pin indices don't correspond 1:1 to stem pin
+      // indices, so a by-index merge would combine unrelated channels.
+      // wire.usedChannelIndices already references stem-side indices here
+      // (set in commitSplice), so just show the stem's own data directly.
+      nPinsMerge=nPinsA;
+      cSrc={pins:nPinsA,channels:cA.channels,colors:cA.colors,
+            isSplice:cA.isSplice,systemId:cA.systemId,channelMap:cA.channelMap};
+    } else {
+      nPinsMerge=Math.max(nPinsA,nPinsB,cA.pins||0,cB.pins||0);
+      const mergedChannels=Array.from({length:nPinsMerge},(_,i)=>{
+        const ca=cA.channels[i]||'', cb=cB.channels[i]||'';
+        return ca||cb;
+      });
+      // For each pin: take cA color if set non-red, else cB color if set non-red, else red
+      // Result: EITHER connector's color edits are always visible
+      const mergedColors=Array.from({length:nPinsMerge},(_,i)=>{
+        const ca=cA.colors[i]||'red';
+        const cb=cB.colors[i]||'red';
+        if(ca!=='red')return ca;
+        if(cb!=='red')return cb;
+        return 'red';
+      });
+      // cSrc is a virtual object with merged data
+      cSrc={pins:nPinsMerge,channels:mergedChannels,colors:mergedColors,
+            isSplice:cA.isSplice,systemId:cA.systemId,channelMap:cA.channelMap};
+    }
 
     // Filter channels shown on this wire:
     let activeChIndices=null;

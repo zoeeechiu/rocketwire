@@ -209,6 +209,36 @@
         <span class="sl" style="margin-top:0">Stems from — choose side (inherits type &amp; pins)</span>
         <select class="sel" id="sp-from" onchange="onSpFrom()" style="margin-bottom:4px"></select>
       </div>
+      <div id="sp-difftype-row">
+        <label class="pchk"><input type="checkbox" id="sp-diff-type" onchange="onSpDiffType(this.checked)"><span>Use a different connector type for the splice</span></label>
+      </div>
+      <div id="sp-conn-type-form" style="display:none">
+        <span class="sl" style="margin-top:0">Splice connector type</span>
+        <select class="sel" id="spt-type" onchange="onSptType(this.value)">
+          <option value="Amphenol 9-35">Amphenol 9-35 (6-pin)</option>
+          <option value="Amphenol 13-pin">Amphenol 13-pin</option>
+          <option value="DSUB-9">D-SUB 9</option>
+          <option value="DSUB-15">D-SUB 15</option>
+          <option value="DSUB-37">D-SUB 37</option>
+          <option value="Molex">Molex</option>
+          <option value="XT60">XT60</option>
+          <option value="XT30">XT30</option>
+          <option value="JST">JST</option>
+          <option value="Custom">Custom…</option>
+        </select>
+        <div id="spt-cname-wrap" style="display:none;margin-top:6px"><input class="inp" id="spt-cname" placeholder="Custom type name"></div>
+        <span class="sl">Gender</span><select class="sel" id="spt-gender" onchange="onSptGender(this.value)"><option>Male</option><option>Female</option></select>
+        <div id="spt-pins-row"><span class="sl">Pin count</span><input class="inp" id="spt-pins" type="number" value="6" min="1" max="64" onchange="onSptPins(+this.value)"></div>
+        <div id="spt-grid-row" style="display:none">
+          <span class="sl">Columns</span>
+          <input class="inp" id="spt-cols" type="number" min="1" max="32" value="5" onchange="onSptGrid()">
+          <span class="sl">Rows</span>
+          <input class="inp" id="spt-rows" type="number" min="1" max="32" value="1" onchange="onSptGrid()">
+          <div style="font-size:10px;color:#aaa;margin-top:4px">Pin count = rows × columns</div>
+        </div>
+        <span class="sl">Map each pin to a stem channel</span>
+        <div id="spt-ch"></div>
+      </div>
       <span class="sl">Number of children</span>
       <input class="inp" id="sp-nchildren" type="number" min="1" max="20" value="1" onchange="onSpNchildren(+this.value)">
       <div id="sp-children-area"></div>
