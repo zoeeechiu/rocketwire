@@ -65,7 +65,7 @@ function renderAddForm(){
         <option value="JST">JST</option>
         <option value="Custom">Custom…</option>
       </select>
-      <div id="nc-cname-wrap" style="display:none;margin-top:6px"><input class="inp" id="nc-cname" placeholder="Custom type name"></div>
+      <div id="nc-cname-wrap" style="display:none;margin-top:6px"><input class="inp" id="nc-cname" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" placeholder="Custom type name"></div>
       <span class="sl">Gender</span><select class="sel" id="nc-gender"><option>Male</option><option>Female</option></select>
       <div id="nc-pins-row"><span class="sl">Pin count</span><input class="inp" id="nc-pins" type="number" value="6" min="1" max="64" onchange="onNcPins(+this.value)"></div>
       <div id="nc-grid-row" style="display:none">
@@ -130,7 +130,7 @@ function renderNcCh(){
   const box=document.getElementById('nc-ch');if(!box||!newConnTemp)return;box.innerHTML='';
   Array.from({length:Math.min(newConnTemp.pins,24)},(_,i)=>{
     const row=document.createElement('div');row.className='chmini';
-    row.innerHTML=`<span class="pb">${i+1}</span><input placeholder="e.g. GND" value="${newConnTemp.channels[i]||''}"><select>${WC.map(c=>`<option value="${c}"${newConnTemp.colors[i]===c?' selected':''}>${c}</option>`).join('')}</select>`;
+    row.innerHTML=`<span class="pb">${i+1}</span><input autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" placeholder="e.g. GND" value="${newConnTemp.channels[i]||''}"><select>${WC.map(c=>`<option value="${c}"${newConnTemp.colors[i]===c?' selected':''}>${c}</option>`).join('')}</select>`;
     row.querySelector('input').onchange=e=>{newConnTemp.channels[i]=e.target.value;};
     row.querySelector('select').onchange=e=>{newConnTemp.colors[i]=e.target.value;};
     box.appendChild(row);

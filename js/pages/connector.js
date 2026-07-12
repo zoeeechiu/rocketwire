@@ -260,7 +260,7 @@ function renderChList(conn){
   conn.channels.slice(0,n).forEach((ch,i)=>{
     const row=document.createElement('div');row.className='ch-row';
     row.innerHTML=`<div class="pnum">${i+1}</div>
-      <input class="chinp" value="${ch}" placeholder="e.g. GND" data-i="${i}">
+      <input class="chinp" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" value="${ch}" placeholder="e.g. GND" data-i="${i}">
       <select class="colsel" data-i="${i}">${WC.map(c=>`<option value="${c}"${conn.colors[i]===c?' selected':''} style="background:${WHX[c]||'#fff'};color:${['black','purple','blue'].includes(c)?'#fff':'#222'}">${c}</option>`).join('')}</select>`;
     row.querySelector('input').onchange=e=>{if(draftConn)draftConn.channels[+e.target.dataset.i]=e.target.value;checkWarn(draftConn||conn);};
     const sel=row.querySelector('select');
@@ -405,8 +405,15 @@ function saveConn(){
     conn.cols=draftConn.cols;
     conn.rows=draftConn.rows;
     // Sync colors and channels, trimmed to pin count
+    const oldChannels=[...(conn.channels||[])];
+    const oldColors=[...(conn.colors||[])];
     conn.colors=Array.from({length:conn.pins},(_,i)=>draftConn.colors[i]||'red');
     conn.channels=Array.from({length:conn.pins},(_,i)=>draftConn.channels[i]||'');
+    // If a channel moved to a different pin (renamed at one index, appeared
+    // at another), keep any splice this connector stems from — or the
+    // connector's own channelMap if it IS a splice — routed to that channel
+    // by name instead of the now-stale index.
+    resyncSpliceRelationships(conn,oldChannels,oldColors);
     // Mirror channel names + colors onto the connector this one is wired to,
     // so renaming a net here renames it on the other end too
     syncWiredCounterpart(conn);

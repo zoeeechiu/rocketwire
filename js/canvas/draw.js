@@ -96,12 +96,23 @@ function redraw(){
 
     // Filter channels shown on this wire:
     let activeChIndices=null;
+    let branchChansToDraw=null;
     if(wire.isBranch&&cA.isSplice&&cA.channelMap){
-      activeChIndices=[];
+      // Branch wire (splice -> child): resolve each routed channel by NAME
+      // against the CHILD's own channels/colors, rather than assuming the
+      // splice's pin index lines up with the child's pin index. This way it
+      // keeps working correctly even if the child's own pin arrangement
+      // changes later — the wire "follows" the channel, not a raw index.
+      branchChansToDraw=[];
       cA.channelMap.forEach((mappings,chIdx)=>{
         const mapped=Array.isArray(mappings)?mappings:[mappings];
-        const routedHere=mapped.some(m=>m&&m.connId===cB.id);
-        if(routedHere)activeChIndices.push(chIdx);
+        const m=mapped.find(mm=>mm&&mm.connId===cB.id);
+        if(!m)return;
+        const name=m.chName||cA.channels[chIdx]||'';
+        if(!name)return;
+        const childIdx=cB.channels.indexOf(name);
+        const col=childIdx>=0?(cB.colors[childIdx]||'red'):(cA.colors[chIdx]||'red');
+        branchChansToDraw.push({ch:name,col:WHX[col]||'#c0392b',i:chIdx});
       });
     } else if(wire.usedChannelIndices&&wire.usedChannelIndices.length>0){
       activeChIndices=wire.usedChannelIndices;
@@ -111,7 +122,7 @@ function redraw(){
       const nPins=cSrc.pins||cSrc.channels.length;
       const allChans=Array.from({length:nPins},(_,i)=>cSrc.channels[i]||'');
       const activeIdxSet=activeChIndices?new Set(activeChIndices):null;
-      const chansToDraw=allChans.map((ch,i)=>({ch,col:WHX[cSrc.colors[i]]||'#c0392b',i}))
+      const chansToDraw=branchChansToDraw!==null?branchChansToDraw:allChans.map((ch,i)=>({ch,col:WHX[cSrc.colors[i]]||'#c0392b',i}))
         .filter(({i})=>activeIdxSet===null||activeIdxSet.has(i));
       const n=chansToDraw.length;
       if(n===0){

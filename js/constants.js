@@ -36,6 +36,71 @@ function collectAllConnectors(node, out){
   return out;
 }
 
+// Remap a splice's channelMap so each existing routing "follows" its channel
+// by NAME rather than staying pinned to a now-stale index. Used whenever a
+// splice's own channels array gets reordered (directly, or via stem mirror).
+function remapChannelMapByName(splice, oldChannels, newChannels){
+  if(!splice.channelMap)return;
+  const newIndexByName={};
+  newChannels.forEach((name,i)=>{if(name&&newIndexByName[name]===undefined)newIndexByName[name]=i;});
+  const newMap=Array.from({length:newChannels.length},()=>null);
+  splice.channelMap.forEach((mappings,oldIdx)=>{
+    if(!Array.isArray(mappings)||!mappings.some(m=>m&&m.connId))return;
+    const name=oldChannels[oldIdx];
+    const targetIdx=(name&&newIndexByName[name]!==undefined)?newIndexByName[name]:oldIdx;
+    if(targetIdx>=0&&targetIdx<newMap.length)newMap[targetIdx]=mappings.map(m=>({...m}));
+  });
+  for(let i=0;i<newMap.length;i++){if(!newMap[i])newMap[i]=[{connId:'',chName:''}];}
+  splice.channelMap=newMap;
+  const used=new Set();
+  newMap.forEach((mappings,i)=>{if(mappings.some(m=>m&&m.connId))used.add(i);});
+  splice.usedChannelIndices=[...used];
+}
+
+// When a connector is saved, keep any splice(s) stemming from it in sync:
+// - Same-type splices (no stemChannelMap) always mirror the stem's full
+//   pinout, so re-copy channels/colors and remap channelMap by name.
+// - Custom-type splices (stemChannelMap set) only reference specific stem
+//   channels by index; follow each one by name if the stem reordered.
+// Also remaps the splice's own channelMap if the SAVED connector IS a
+// splice being edited directly (e.g. via double-click, not the splice page).
+function resyncSpliceRelationships(conn, oldChannels, oldColors){
+  const sc=scope();if(!sc)return;
+  const stemSplices=sc.connectors.filter(c=>c.isSplice&&c.stemFromId===conn.id);
+  stemSplices.forEach(splice=>{
+    const stemWire=sc.wires.find(w=>w.spliceConnId===splice.id);
+    if(!splice.stemChannelMap){
+      const oldSpliceChannels=[...(splice.channels||[])];
+      splice.type=conn.type;splice.pins=conn.pins;
+      splice.channels=[...conn.channels];splice.colors=[...conn.colors];
+      remapChannelMapByName(splice,oldSpliceChannels,splice.channels);
+      if(stemWire){
+        const newUsed=new Set();
+        (stemWire.usedChannelIndices||[]).forEach(oldIdx=>{
+          const name=oldChannels[oldIdx];
+          if(!name)return;
+          const newIdx=conn.channels.indexOf(name);
+          if(newIdx>=0)newUsed.add(newIdx);
+        });
+        stemWire.usedChannelIndices=[...newUsed];
+      }
+    } else {
+      splice.stemChannelMap=splice.stemChannelMap.map((stemIdx,pinIdx)=>{
+        if(stemIdx===null||stemIdx===undefined)return stemIdx;
+        const name=oldChannels[stemIdx];
+        if(!name)return stemIdx;
+        const newIdx=conn.channels.indexOf(name);
+        if(newIdx<0)return stemIdx;
+        splice.channels[pinIdx]=conn.channels[newIdx];
+        splice.colors[pinIdx]=conn.colors[newIdx]||'red';
+        return newIdx;
+      });
+      if(stemWire)stemWire.usedChannelIndices=[...new Set(splice.stemChannelMap.filter(v=>v!==null&&v!==undefined))];
+    }
+  });
+  if(conn.isSplice)remapChannelMapByName(conn,oldChannels,conn.channels);
+}
+
 // Find the single connector this one is directly wired to via a plain
 // point-to-point wire (each connector connects to at most one other
 // connector that way). Splice stem/branch wires are deliberately excluded:

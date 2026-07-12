@@ -27,7 +27,7 @@
   <div class="home-hdr">
     <div class="home-title">Projects</div>
     <div style="display:flex;gap:9px;align-items:center">
-      <div class="srch"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#bbb" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input type="text" placeholder="Search projects…" oninput="renderHome(this.value)"></div>
+      <div class="srch"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#bbb" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input type="text" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" placeholder="Search projects…" oninput="renderHome(this.value)"></div>
       <button class="btn btn-red" onclick="reqAuth(()=>openM('m-newproj'))">+ New Project</button>
       <button class="btn btn-ol" onclick="reqAuth(()=>{loadFromCloud();notify('Syncing...','ok');})" title="Sync from cloud">↻ Sync</button>
     </div>
@@ -96,7 +96,7 @@
       </select>
       <div id="ct-cname-wrap" style="display:none;margin-top:8px">
         <span class="sl">Custom type name</span>
-        <input class="inp" id="ct-cname" placeholder="e.g. MilSpec-C" oninput="onCtCname(this.value)">
+        <input class="inp" id="ct-cname" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" placeholder="e.g. MilSpec-C" oninput="onCtCname(this.value)">
       </div>
       <div id="ct-pins-row">
         <span class="sl">Pin count</span>
@@ -110,7 +110,7 @@
         <div style="font-size:10px;color:#aaa;margin-top:4px">Pin count = rows × columns</div>
       </div>
       <span class="sl">Connector name (optional)</span>
-      <input class="inp" id="ct-name" placeholder="e.g. J1, Power Bus" oninput="onCtName(this.value)" style="margin-bottom:6px">
+      <input class="inp" id="ct-name" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" placeholder="e.g. J1, Power Bus" oninput="onCtName(this.value)" style="margin-bottom:6px">
       <span class="sl">Connector ID</span>
       <div id="ct-id" style="font-size:22px;font-weight:700;color:#c0392b">#1</div>
       <div id="ct-warns" style="margin-top:10px;display:flex;flex-direction:column;gap:6px"></div>
@@ -180,7 +180,7 @@
 <div class="mbg" id="m-newproj" style="display:none">
   <div class="modal"><h2>New project</h2><div class="msub">Start a fresh wiring project.</div>
     <div class="mf"><label>Project name</label><input id="np-name" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" placeholder="e.g. 2026 Launch Vehicle" onkeydown="if(event.key==='Enter')createProj()"></div>
-    <div class="mf"><label>Description (optional)</label><input id="np-desc" placeholder="Short description"></div>
+    <div class="mf"><label>Description (optional)</label><input id="np-desc" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" placeholder="Short description"></div>
     <div class="mbtns"><button class="btn btn-gh" onclick="closeM('m-newproj')">Cancel</button><button class="btn btn-red" onclick="createProj()">Create</button></div>
   </div>
 </div>
@@ -226,7 +226,7 @@
           <option value="JST">JST</option>
           <option value="Custom">Custom…</option>
         </select>
-        <div id="spt-cname-wrap" style="display:none;margin-top:6px"><input class="inp" id="spt-cname" placeholder="Custom type name"></div>
+        <div id="spt-cname-wrap" style="display:none;margin-top:6px"><input class="inp" id="spt-cname" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" placeholder="Custom type name"></div>
         <span class="sl">Gender</span><select class="sel" id="spt-gender" onchange="onSptGender(this.value)"><option>Male</option><option>Female</option></select>
         <div id="spt-pins-row"><span class="sl">Pin count</span><input class="inp" id="spt-pins" type="number" value="6" min="1" max="64" onchange="onSptPins(+this.value)"></div>
         <div id="spt-grid-row" style="display:none">
