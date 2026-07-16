@@ -115,40 +115,6 @@ function resyncSpliceRelationships(conn, oldChannels, oldColors){
   });
 }
 
-// Find the single connector this one is directly wired to via a plain
-// point-to-point wire (each connector connects to at most one other
-// connector that way). Splice stem/branch wires are deliberately excluded:
-// a splice connector's channels represent a fan-out of its stem's full
-// pinout, mapped to children via channelMap — not a 1:1 index mirror like
-// a normal wire — so mirroring names/colors across those would corrupt the
-// shared channel layout that every other child also depends on.
-function wiredCounterpart(conn){
-  const sc=scope();if(!sc||!conn)return null;
-  const wire=sc.wires.find(w=>(w.fromConn===conn.id||w.toConn===conn.id)&&!w.isBranch&&!w.spliceConnId);
-  if(!wire)return null;
-  const otherId=wire.fromConn===conn.id?wire.toConn:wire.fromConn;
-  const other=sc.connectors.find(c=>c.id===otherId);
-  if(!other||other.isSplice||conn.isSplice)return null;
-  return other;
-}
-
-// Mirror this connector's channel names + colors (by pin index) onto the
-// connector it's directly wired to, so both ends of a net always show the
-// same label/color — renaming or recoloring one side keeps the other in sync.
-function syncWiredCounterpart(conn){
-  const other=wiredCounterpart(conn);
-  if(!other||!conn.channels)return;
-  if(!other.channels)other.channels=[];
-  if(!other.colors)other.colors=[];
-  const n=conn.channels.length;
-  while(other.channels.length<n)other.channels.push('');
-  while(other.colors.length<n)other.colors.push('red');
-  for(let i=0;i<n;i++){
-    other.channels[i]=conn.channels[i]||'';
-    other.colors[i]=conn.colors[i]||'red';
-  }
-}
-
 // Propagate a just-saved connector's channel colors to every other connector
 // in the project that has a channel with the same name (same "net"),
 // so a net's color stays consistent everywhere it appears.

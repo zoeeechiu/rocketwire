@@ -414,11 +414,11 @@ function saveConn(){
     // connector's own channelMap if it IS a splice — routed to that channel
     // by name instead of the now-stale index.
     resyncSpliceRelationships(conn,oldChannels,oldColors);
-    // Mirror channel names + colors onto the connector this one is wired to,
-    // so renaming a net here renames it on the other end too
-    syncWiredCounterpart(conn);
     // Any channel here that shares a name with a channel on another connector
-    // (same net, e.g. "GND") gets its color applied everywhere that net appears
+    // (same net, e.g. "GND") gets its color applied everywhere that net appears.
+    // Note: pin POSITION is intentionally never mirrored across connectors —
+    // the same net can (and often does) sit at a different pin number on
+    // each connector it appears on; only the name and color travel with it.
     syncNetColors(conn);
     // Auto-flip mated connector gender
     if(conn.gender){

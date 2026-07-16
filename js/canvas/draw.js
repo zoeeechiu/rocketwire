@@ -77,31 +77,16 @@ function redraw(){
       // wire.usedChannelIndices already references stem-side indices here
       // (set in commitSplice), so just show the stem's own data directly.
       nPinsMerge=nPinsA;
-      cSrc={pins:nPinsA,channels:cA.channels,colors:cA.colors,
-            isSplice:cA.isSplice,systemId:cA.systemId,channelMap:cA.channelMap};
+      cSrc={pins:nPinsA,channels:cA.channels,colors:cA.colors};
     } else {
       nPinsMerge=Math.max(nPinsA,nPinsB,cA.pins||0,cB.pins||0);
-      const mergedChannels=Array.from({length:nPinsMerge},(_,i)=>{
-        const ca=cA.channels[i]||'', cb=cB.channels[i]||'';
-        return ca||cb;
-      });
-      // For each pin: take cA color if set non-red, else cB color if set non-red, else red
-      // Result: EITHER connector's color edits are always visible
-      const mergedColors=Array.from({length:nPinsMerge},(_,i)=>{
-        const ca=cA.colors[i]||'red';
-        const cb=cB.colors[i]||'red';
-        if(ca!=='red')return ca;
-        if(cb!=='red')return cb;
-        return 'red';
-      });
-      // cSrc is a virtual object with merged data
-      cSrc={pins:nPinsMerge,channels:mergedChannels,colors:mergedColors,
-            isSplice:cA.isSplice,systemId:cA.systemId,channelMap:cA.channelMap};
+      cSrc={pins:nPinsMerge};
     }
 
     // Filter channels shown on this wire:
     let activeChIndices=null;
     let branchChansToDraw=null;
+    let namedChansToDraw=null;
     if(wire.isBranch&&cA.isSplice&&cA.channelMap){
       // Branch wire (splice -> child): resolve each routed channel by NAME
       // against the CHILD's own channels/colors, rather than assuming the
@@ -130,17 +115,48 @@ function redraw(){
         const col=childIdx>=0?(cB.colors[childIdx]||'red'):(cA.colors[chIdx]||'red');
         branchChansToDraw.push({ch:name,col:WHX[col]||'#c0392b',i:chIdx});
       });
-    } else if(wire.usedChannelIndices&&wire.usedChannelIndices.length>0){
-      activeChIndices=wire.usedChannelIndices;
+    } else if(cB.isSplice&&Array.isArray(cB.stemChannelMap)){
+      // Custom-type splice stem wire: cSrc is already the stem's own data
+      // directly (no merge), filtered by stem-side indices below.
+      if(wire.usedChannelIndices&&wire.usedChannelIndices.length>0)activeChIndices=wire.usedChannelIndices;
+    } else {
+      // Plain wire (or a same-type splice's stem wire, which mirrors its
+      // stem 1:1 so this degenerates to the same thing): pin position is
+      // connector-local, so cA's channel at index i and cB's channel at
+      // index i are NOT necessarily the same net. Build the list by NAME —
+      // the union of every named channel on either side, deduplicated —
+      // instead of merging position-for-position, so the same net at
+      // different pin numbers on each connector renders as ONE wire
+      // segment, not two. Colors already stay in sync by name via
+      // syncNetColors, so either side's color for a given name is correct.
+      const byName=new Map();
+      cA.channels.forEach((name,i)=>{if(name&&!byName.has(name))byName.set(name,cA.colors[i]||'red');});
+      cB.channels.forEach((name,i)=>{if(name&&!byName.has(name))byName.set(name,cB.colors[i]||'red');});
+      let allowedNames=null;
+      if(wire.usedChannelIndices&&wire.usedChannelIndices.length>0){
+        // Stem wire for a same-type splice: usedChannelIndices are STEM-side
+        // pin indices (set in commitSplice) — convert to names to filter by.
+        allowedNames=new Set(wire.usedChannelIndices.map(idx=>cA.channels[idx]).filter(Boolean));
+      }
+      namedChansToDraw=[...byName.entries()]
+        .filter(([name])=>allowedNames===null||allowedNames.has(name))
+        .map(([ch,col],idx)=>({ch,col:WHX[col]||'#c0392b',i:idx}));
     }
 
     if(showCh&&nPinsMerge>0){
-      const nPins=cSrc.pins||cSrc.channels.length;
-      const allChans=Array.from({length:nPins},(_,i)=>cSrc.channels[i]||'');
-      const activeIdxSet=activeChIndices?new Set(activeChIndices):null;
-      const chansToDraw=(branchChansToDraw!==null?branchChansToDraw:allChans.map((ch,i)=>({ch,col:WHX[cSrc.colors[i]]||'#c0392b',i}))
-        .filter(({i})=>activeIdxSet===null||activeIdxSet.has(i)))
-        .filter(({ch})=>ch); // unlabeled channels aren't drawn at all
+      let chansToDraw;
+      if(branchChansToDraw!==null){
+        chansToDraw=branchChansToDraw;
+      } else if(namedChansToDraw!==null){
+        chansToDraw=namedChansToDraw;
+      } else {
+        const nPins=cSrc.pins||cSrc.channels.length;
+        const allChans=Array.from({length:nPins},(_,i)=>cSrc.channels[i]||'');
+        const activeIdxSet=activeChIndices?new Set(activeChIndices):null;
+        chansToDraw=allChans.map((ch,i)=>({ch,col:WHX[cSrc.colors[i]]||'#c0392b',i}))
+          .filter(({i})=>activeIdxSet===null||activeIdxSet.has(i));
+      }
+      chansToDraw=chansToDraw.filter(({ch})=>ch); // unlabeled channels aren't drawn at all
       const n=chansToDraw.length;
       if(n===0){
         // Branch wire with no mapped channels — draw thin gray placeholder
