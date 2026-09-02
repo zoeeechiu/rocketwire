@@ -260,18 +260,48 @@
 <div id="ctx"></div>
 <div id="notif"></div>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="js/supabase.js?v=1783795784"></script>
-  <script src="js/constants.js?v=1783795784"></script>
-  <script src="js/state.js?v=1783795784"></script>
-  <script src="js/storage.js?v=1783795784"></script>
-  <script src="js/pages/home.js?v=1783795784"></script>
-  <script src="js/canvas/routing.js?v=1783795784"></script>
-  <script src="js/canvas/draw.js?v=1783795784"></script>
-  <script src="js/canvas/events.js?v=1783795784"></script>
-  <script src="js/splice.js?v=1783795784"></script>
-  <script src="js/panels.js?v=1783795784"></script>
-  <script src="js/pages/connector.js?v=1783795784"></script>
-  <script src="js/pages/add-system.js?v=1783795784"></script>
-  <script src="js/export.js?v=1783795784"></script>
+  <script>
+    // ── CACHE-BUSTING SCRIPT LOADER ──
+    // Every local script below is requested with a `?v=` query string tied
+    // to BUILD_VERSION. Previously that number was hand-typed onto 13
+    // separate <script> tags — easy to edit one file and forget to bump
+    // the version, leaving the browser (and GitHub Pages' CDN) happily
+    // serving a stale cached copy forever.
+    //
+    // Using Date.now() here means BUILD_VERSION is different on every
+    // single page load, so every visit always fetches the current version
+    // of every file straight from the server — no manual step, nothing to
+    // forget. The trade-off is these files are never long-term cached by
+    // the browser between visits, but for a JS bundle this size that's a
+    // non-issue in practice.
+    //
+    // (If you'd rather keep normal browser caching between visits and only
+    // bust the cache on deploys, change this one line to a fixed value you
+    // manually bump — e.g. const BUILD_VERSION = 2; — every time you push
+    // a JS change. Either way, it's a single edit in one place now.)
+    const BUILD_VERSION = Date.now();
+    const APP_SCRIPTS = [
+      'js/supabase.js',
+      'js/constants.js',
+      'js/state.js',
+      'js/storage.js',
+      'js/pages/home.js',
+      'js/canvas/routing.js',
+      'js/canvas/draw.js',
+      'js/canvas/events.js',
+      'js/splice.js',
+      'js/panels.js',
+      'js/pages/connector.js',
+      'js/pages/add-system.js',
+      'js/export.js'
+    ];
+    // document.write during initial parse executes each <script> in order,
+    // synchronously, before the next one is written — so load order (which
+    // matters here: constants.js before state.js, etc.) is preserved
+    // exactly as it was with static tags.
+    APP_SCRIPTS.forEach(src => {
+      document.write('<script src="' + src + '?v=' + BUILD_VERSION + '"><' + '/script>');
+    });
+  </script>
 </body>
 </html>
