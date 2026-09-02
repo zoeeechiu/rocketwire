@@ -121,6 +121,11 @@ function onMD(e){
         if(sys){
           if(!ST.isLoggedIn){reqAuth(()=>{});return;}
           drag={on:true,target:sys,isSplice:false,isWire:false,ox:w.x-sys.x,oy:w.y-sys.y};cv.style.cursor='grabbing';
+        } else {
+          // Empty space — plain click-drag pans the camera (no login/auth
+          // needed since panning doesn't modify project data).
+          panSt={on:true,sx,sy,cx:cam.x,cy:cam.y};
+          cv.style.cursor='grabbing';
         }
       }
     }
