@@ -4,9 +4,9 @@
 const CREDS = {user:'rocketteam',pass:'launch2026'};
 const WC = ['red','black','yellow','blue','green','orange','gray','purple','white','brown','pink','cyan'];
 const WHX = {red:'#e74c3c',black:'#2c2c2c',yellow:'#f1c40f',blue:'#2980b9',green:'#27ae60',orange:'#e67e22',gray:'#95a5a6',purple:'#8e44ad',white:'#bdc3c7',brown:'#795548',pink:'#e91e63',cyan:'#00bcd4'};
-const AUTO_PINS = {'Amphenol 9-35':6,'Amphenol 13-pin':13,'XT60':2,'XT30':2,'DSUB-9':9,'DSUB-15':15,'DSUB-37':37};
+const AUTO_PINS = {'Amphenol 9-35':6,'Amphenol 13-pin':13,'Amphenol 9-98':3,'XT60':2,'XT30':2,'DSUB-9':9,'DSUB-15':15,'DSUB-37':37};
 // Connectors where user cannot change pin count
-const FIXED_PINS = new Set(['Amphenol 9-35','Amphenol 13-pin','XT60','XT30','DSUB-9','DSUB-15','DSUB-37']);
+const FIXED_PINS = new Set(['Amphenol 9-35','Amphenol 13-pin','Amphenol 9-98','XT60','XT30','DSUB-9','DSUB-15','DSUB-37']);
 const PAD = 20; // collision padding around boxes
 const GRID = 14; // routing grid cell size (world units)
 
@@ -196,6 +196,13 @@ const PINOUTS = {
     for(let i=0;i<botN;i++) p.push({id:i+topN+1,dx:-botSpan/2+i*sp, dy:16});
     return p;
   })()},
+  // Amphenol 9-98 (3-pin): pins sit at the vertices of an equilateral
+  // triangle — pin 1 at top, 2 and 3 at the bottom-right/bottom-left.
+  'Amphenol 9-98':{shape:'amphenol',R:40,fixedPins:3,pins:[
+    {id:1, dx:0,      dy:-40},
+    {id:2, dx:34.64,  dy:20},
+    {id:3, dx:-34.64, dy:20}
+  ]},
   'Molex':{shape:'rect_grid',fixedPins:null,pins:[]},
   'XT60':{shape:'xt',W:60,H:44,fixedPins:2,pins:[{id:1,dx:-16,dy:0,lbl:'+'},{id:2,dx:16,dy:0,lbl:'−'}]},
   'XT30':{shape:'xt',W:48,H:36,fixedPins:2,pins:[{id:1,dx:-12,dy:0,lbl:'+'},{id:2,dx:12,dy:0,lbl:'−'}]},

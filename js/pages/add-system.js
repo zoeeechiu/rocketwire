@@ -55,7 +55,8 @@ function renderAddForm(){
       <span class="sl">Connector type</span>
       <select class="sel" id="nc-type" onchange="onNcType(this.value)">
         <option value="Amphenol 9-35">Amphenol 9-35 (6-pin)</option>
-        <option value="Amphenol 13-pin">Amphenol 13-pin</option>
+        <option value="Amphenol 13-pin">Amphenol 11-35 (13-pin)</option>
+        <option value="Amphenol 9-98">Amphenol 9-98 (3-pin)</option>
         <option value="DSUB-9">D-SUB 9</option>
         <option value="DSUB-15">D-SUB 15</option>
         <option value="DSUB-37">D-SUB 37</option>
