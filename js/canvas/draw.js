@@ -288,7 +288,7 @@ function drawConnectorDot(conn,sc,showCnum,showCtype){
   const showCname=document.getElementById('v-cname')?.checked;
   let line1='',line2='',line3='';
   if(showCnum)line1='#'+conn.num;
-  if(showCtype)line2=conn.isSplice?conn.type:(conn.customName||conn.type);
+  if(showCtype)line2=conn.isSplice?shortTypeLabel(conn.type):(conn.customName||shortTypeLabel(conn.type));
   if(showCname&&conn.name)line3=conn.name;
   if(line1||line2||line3){
     const lines=[line1,line2,line3].filter(Boolean);

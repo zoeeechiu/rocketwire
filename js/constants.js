@@ -21,6 +21,22 @@ function connTypeLabel(c){
   return `(${c.type})`;
 }
 
+// Abbreviated labels for the on-canvas "Connector types" overlay (the
+// v-ctype checkbox toggle) — the full Amphenol names are too long to sit
+// next to a small connector dot on the canvas, so shorten just those.
+// Every other type (DSUB-9, XT60, Molex, Custom, etc.) still shows as its
+// normal `type` value. Note the underlying `type` values themselves are
+// left unchanged everywhere else in the app (dropdowns, saved data, etc.)
+// — this only affects this one canvas overlay.
+const SHORT_TYPE_LABELS = {
+  'Amphenol 9-35':'Amp 9-35',
+  'Amphenol 13-pin':'Amp 11-35',
+  'Amphenol 9-98':'Amp 9-98'
+};
+function shortTypeLabel(type){
+  return SHORT_TYPE_LABELS[type] || type;
+}
+
 // Mutate array in-place (preserves references held by navStack/ST.projects)
 function removeWhere(arr, fn){
   for(let i=arr.length-1;i>=0;i--){if(fn(arr[i]))arr.splice(i,1);}
