@@ -129,16 +129,18 @@ function pruneDeletedTree(node, delSet) {
 // and anything tombstoned in either version's deletedIds is removed from both.
 function mergeProjectData(local, remote) {
   function mergeById(localArr, remoteArr) {
-    const merged = [...(remoteArr || [])];
-    for (const localItem of (localArr || [])) {
-      const idx = merged.findIndex(r => r.id === localItem.id);
-      if (idx >= 0) {
-        // Both have it — local wins (user's own edit takes priority)
-        merged[idx] = localItem;
-      } else {
-        // Local has something remote doesn't — add it (new item)
-        merged.push(localItem);
-      }
+    // Local order is the base — not just local content. Connector layout
+    // (which side of a box, and where along that edge) is driven entirely
+    // by each connector's position in this array (see connEdgePos in
+    // routing.js), so a merge that kept per-ID content but re-sorted into
+    // remote's order would silently undo any local drag-to-reorder within
+    // a few hundred ms of doing it, even though the content itself was
+    // "merged" correctly. Anything remote has that local doesn't (e.g.
+    // added from another device) still gets appended at the end.
+    const merged = [...(localArr || [])];
+    const localIds = new Set(merged.map(x => x.id));
+    for (const remoteItem of (remoteArr || [])) {
+      if (!localIds.has(remoteItem.id)) merged.push(remoteItem);
     }
     return merged;
   }
