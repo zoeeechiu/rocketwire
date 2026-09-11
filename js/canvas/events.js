@@ -72,6 +72,36 @@ function ptSegDist(px,py,x1,y1,x2,y2){
   return Math.hypot(px-x1-t*dx,py-y1-t*dy);
 }
 
+// ── CONNECTOR EDGE REORDERING ──
+// Connectors sharing an edge are laid out evenly along it purely based on
+// the order they appear in sc.connectors (see connEdgePos in routing.js —
+// it computes each one's slot as (index-among-same-edge-peers)/(total+1)).
+// So "moving" a connector up/down its own edge doesn't need new x/y state
+// at all — it just means changing that relative order. Dragging a
+// connector dot along its edge, past a neighbor's slot, swaps the two in
+// the underlying array, which immediately swaps their visual position and
+// re-routes their wires accordingly. This lets a user untangle crossed
+// wires without manually re-routing anything.
+function reorderConnOnEdge(conn, sys, edge, w, sc){
+  const onEdge=sc.connectors.filter(c=>c.systemId===sys.id&&bestEdgeForConn(c,sys,sc)===edge);
+  if(onEdge.length<2)return; // no neighbors to swap with
+  const siblings=onEdge.filter(c=>c!==conn);
+  const scalarOf=c=>{
+    const p=connEdgePos(c);
+    return (edge==='left'||edge==='right')?p.y:p.x;
+  };
+  const mouseScalar=(edge==='left'||edge==='right')?w.y:w.x;
+  siblings.sort((a,b)=>scalarOf(a)-scalarOf(b));
+  let k=0;
+  while(k<siblings.length&&mouseScalar>=scalarOf(siblings[k]))k++;
+  const newOrder=[...siblings.slice(0,k),conn,...siblings.slice(k)];
+  // Re-assign back into the same master-array slots this edge group
+  // already occupies, leaving every other connector's position untouched.
+  const slotIdxs=[];
+  sc.connectors.forEach((c,i)=>{if(onEdge.includes(c))slotIdxs.push(i);});
+  slotIdxs.forEach((mi,i)=>{sc.connectors[mi]=newOrder[i];});
+}
+
 // ── CANVAS EVENTS ──
 function onMD(e){
   hideCtx();
@@ -141,9 +171,14 @@ function onMM(e){
       drag.target.x=w.x-drag.ox;
       drag.target.y=w.y-drag.oy;
     } else if(drag.isConnDot){
-      // Snap to nearest edge midpoint as user drags
+      // Dragging a connector dot does two different things depending on
+      // the motion: crossing to a different side of the box re-pins the
+      // connector to that edge (as before); staying on the SAME edge lets
+      // the user drag up/down (or left/right) past a neighboring connector
+      // to swap places with it.
       const conn2=drag.target;
-      const sys2=scope()?.systems.find(s=>s.id===conn2.systemId);
+      const sc2=scope();
+      const sys2=sc2?.systems.find(s=>s.id===conn2.systemId);
       if(sys2){
         // Find which of the 4 edge midpoints is closest to the mouse
         const edgeMids=[
@@ -157,10 +192,17 @@ function onMM(e){
           const d=Math.hypot(w.x-em.x,w.y-em.y);
           if(d<nearestD){nearestD=d;nearest=em;}
         });
-        // Snap to that edge center
-        conn2._pinnedEdge=nearest.edge;
-        conn2._edge=nearest.edge;
-        conn2._edgeT=undefined; // always centered on the edge
+        const curEdge=conn2._pinnedEdge||conn2._edge||'right';
+        if(nearest.edge!==curEdge){
+          // Crossed to a different side of the box — re-pin there,
+          // centered among whatever connectors are already on that edge.
+          conn2._pinnedEdge=nearest.edge;
+          conn2._edge=nearest.edge;
+          conn2._edgeT=undefined;
+        } else if(sc2){
+          // Still on the same edge — reorder relative to neighbors instead
+          reorderConnOnEdge(conn2,sys2,curEdge,w,sc2);
+        }
       }
     } else if(drag.isWire){
       const dx=w.x-drag.ox, dy=w.y-drag.oy;
