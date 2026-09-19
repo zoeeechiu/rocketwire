@@ -2,11 +2,34 @@
 // STORAGE — Supabase cloud + localStorage fallback
 // ═══════════════════════════════════════════════════════
 
+// An item's updatedAt must mean "the last time THIS item's own content
+// changed", not "the last time this device saved anything". Otherwise a stale
+// device that merely pans the canvas re-stamps everything as newer and wins
+// every merge. We fingerprint each item's own fields (children excluded, they
+// get their own fingerprints) and only bump updatedAt when it differs from the
+// fingerprint recorded at the previous save.
+const SKIP_KEYS = new Set(['updatedAt','updated_at','_fp','_edge','__remoteUpdatedAt',
+  '_remoteUpdatedAt','deletedIds','systems','connectors','wires','splices']);
+function fingerprint(item) {
+  return JSON.stringify(item, (k, v) => SKIP_KEYS.has(k) ? undefined : v);
+}
 function touchUpdated(obj) {
   if (!obj) return;
-  const now = Date.now();
-  obj.updatedAt = Math.max(Number(obj.updatedAt) || 0, now);
+  const fp = fingerprint(obj);
+  if (obj.updatedAt === undefined) {
+    obj.updatedAt = Date.now();            // brand-new item
+  } else if (obj._fp !== undefined && obj._fp !== fp) {
+    obj.updatedAt = Date.now();            // content changed since last save
+  }                                         // legacy item with no _fp: just baseline it
+  obj._fp = fp;
   obj.updated_at = obj.updatedAt;
+}
+// Record fingerprints WITHOUT bumping any timestamps. Called after loading or
+// merging data so the first real edit afterwards is detected as a change.
+function baselineFingerprints(node) {
+  if (!node) return;
+  node._fp = fingerprint(node);
+  ['systems','connectors','wires','splices'].forEach(k => (node[k] || []).forEach(baselineFingerprints));
 }
 
 function touchProjectTree(node) {
@@ -69,34 +92,6 @@ function save() {
   } catch(e) {}
 }
 
-// Attempt sync on page unload (best-effort)
-window.addEventListener('beforeunload', () => {
-  if (sbUser && ST.projects.length) {
-    const rows = ST.projects.map(proj => ({
-      id: proj.id, user_id: sbUser.id,
-      name: proj.name, data: proj,
-      updated_at: new Date().toISOString()
-    }));
-    // Use sendBeacon for reliable unload saves
-    const payload = JSON.stringify({ rows });
-    navigator.sendBeacon &&
-      navigator.sendBeacon(
-        `${SUPABASE_URL}/rest/v1/projects`,
-        new Blob([payload], {type:'application/json'})
-      );
-    // Also try sync XHR as fallback
-    try {
-      const xhr = new XMLHttpRequest();
-      xhr.open('POST', `${SUPABASE_URL}/rest/v1/projects?on_conflict=id`, false);
-      xhr.setRequestHeader('apikey', SUPABASE_KEY);
-      xhr.setRequestHeader('Authorization', `Bearer ${SUPABASE_KEY}`);
-      xhr.setRequestHeader('Content-Type', 'application/json');
-      xhr.setRequestHeader('Prefer', 'resolution=merge-duplicates');
-      xhr.send(JSON.stringify(rows));
-    } catch(e) {}
-  }
-});
-
 async function saveToCloud() {
   if (!sbUser || !ST.projects.length) return;
   try {
@@ -113,7 +108,7 @@ async function saveToCloud() {
         // remote row, but do not keep reloading the cloud while the user is
         // still making edits. This preserves the final local draft as the main
         // source of truth for the push.
-        dataToSave = mergeProjectData(proj, { ...existing.data, __remoteUpdatedAt: new Date(existing.updated_at || Date.now()).getTime() });
+        dataToSave = mergeProjectData(proj, existing.data);
         const idx = ST.projects.findIndex(p => p.id === proj.id);
         if (idx >= 0) ST.projects[idx] = dataToSave;
       }
@@ -150,7 +145,8 @@ async function pushChanges() {
 
   try {
     for (let attempt = 0; attempt < 3; attempt++) {
-      const { data: cloudRows } = await sb.from('projects').select('*').eq('user_id', sbUser.id);
+      const { data: cloudRows, error: selErr } = await sb.from('projects').select('*').eq('user_id', sbUser.id);
+      if (selErr) throw selErr;
       const remoteById = new Map((cloudRows || []).map(row => [row.id, row.data]));
 
       const mergedProjects = ST.projects.map(proj => {
@@ -165,6 +161,8 @@ async function pushChanges() {
       }
 
       ST.projects = mergedProjects;
+      ST.projects.forEach(baselineFingerprints);
+      rebindNavStack();
 
       const payload = ST.projects.map(proj => ({
         id: proj.id,
@@ -214,110 +212,27 @@ function pruneDeletedTree(node, delSet) {
   node.systems.forEach(sys => pruneDeletedTree(sys, delSet));
 }
 
-// Merge two versions of a project — combine arrays by ID, local wins for conflicts,
-// and anything tombstoned in either version's deletedIds is removed from both.
-function mergeProjectData(local, remote) {
-  const localStamp = Number(local?.updatedAt || local?.updated_at || 0);
-  const remoteStamp = Number(remote?.updatedAt || remote?.updated_at || remote?.__remoteUpdatedAt || 0);
-  const projectPrefersLocal = localStamp >= remoteStamp;
+// mergeProjectData lives in project-sync.js (single, recursive, ID-based merge).
 
-  function getStamp(item) {
-    if (!item) return 0;
-    const vals = [item.updatedAt, item.updated_at, item.__remoteUpdatedAt, item._remoteUpdatedAt];
-    const nums = vals.filter(v => v !== undefined && v !== null && !Number.isNaN(Number(v))).map(v => Number(v));
-    return nums.length ? Math.max(...nums) : 0;
-  }
-
-  function mergeItemValues(localItem, remoteItem) {
-    const result = { ...localItem, ...remoteItem };
-    for (const key of new Set([...Object.keys(localItem || {}), ...Object.keys(remoteItem || {})])) {
-      const lv = localItem?.[key];
-      const rv = remoteItem?.[key];
-      if (Array.isArray(lv) && Array.isArray(rv)) {
-        const merged = Array.from({ length: Math.max(lv.length, rv.length) }, (_, i) => {
-          const a = lv[i];
-          const b = rv[i];
-          if (a === undefined || a === null || a === '') return b ?? a;
-          if (b === undefined || b === null || b === '') return a;
-          if (a !== b) {
-            const localStamp = getStamp(localItem);
-            const remoteStamp = getStamp(remoteItem);
-            if (remoteStamp > localStamp) return b;
-            // Local-first fallback: same timestamp / no timestamp means the
-            // user's current edit wins rather than an older, longer string.
-            return a;
-          }
-          return a;
-        });
-        result[key] = merged;
-      } else if (lv && rv && typeof lv === 'object' && !Array.isArray(lv) && typeof rv === 'object' && !Array.isArray(rv)) {
-        result[key] = mergeItemValues(lv, rv);
-      }
-    }
-    return result;
-  }
-
-  function mergeById(localArr, remoteArr) {
-    // Local order is the base — not just local content. Connector layout
-    // (which side of a box, and where along that edge) is driven entirely
-    // by each connector's position in this array (see connEdgePos in
-    // routing.js), so a merge that kept per-ID content but re-sorted into
-    // remote's order would silently undo any local drag-to-reorder within
-    // a few hundred ms of doing it, even though the content itself was
-    // "merged" correctly. Anything remote has that local doesn't (e.g.
-    // added from another device) still gets appended at the end.
-    const merged = [...(localArr || [])];
-    const localMap = new Map((localArr || []).map(x => [x.id, x]));
-    const remoteMap = new Map((remoteArr || []).map(x => [x.id, x]));
-    const allIds = new Set([...localMap.keys(), ...remoteMap.keys()]);
-
-    for (const id of allIds) {
-      const localItem = localMap.get(id);
-      const remoteItem = remoteMap.get(id);
-      if (!localItem && remoteItem) { merged.push(remoteItem); continue; }
-      if (!remoteItem) continue;
-
-      const idx = merged.findIndex(item => item && item.id === id);
-      const localStamp = getStamp(localItem);
-      const remoteStamp = getStamp(remoteItem);
-
-      if (remoteStamp > localStamp) {
-        if (idx >= 0) merged[idx] = remoteItem;
-        else merged.push(remoteItem);
-      } else if (remoteStamp < localStamp) {
-        // keep local value as the newer one
-      } else if (idx >= 0) {
-        if (projectPrefersLocal && localItem) {
-          merged[idx] = { ...localItem, ...mergeItemValues(localItem, remoteItem) };
-        } else {
-          merged[idx] = mergeItemValues(localItem, remoteItem);
-        }
-      }
-    }
-
-    return merged;
-  }
-
-  // Union tombstones from both sides, keeping the most recent record per id
-  const delMap = new Map();
-  [...(remote.deletedIds || []), ...(local.deletedIds || [])].forEach(d => {
-    const prev = delMap.get(d.id);
-    if (!prev || d.ts > prev.ts) delMap.set(d.id, d);
+// After ST.projects is replaced by a merge, the live navStack still points at
+// the OLD arrays. Re-point every level at the merged objects.
+function rebindNavStack() {
+  if (!activeProjId || !navStack.length) return;
+  const proj = ST.projects.find(p => p.id === activeProjId);
+  if (!proj) return;
+  Object.assign(navStack[0], {
+    systems: proj.systems, connectors: proj.connectors,
+    wires: proj.wires, splices: proj.splices || []
   });
-  const mergedDeletedIds = [...delMap.values()];
-  const delSet = new Set(mergedDeletedIds.map(d => d.id));
-
-  const result = {
-    ...local,
-    ...remote,
-    systems:    mergeById(local.systems,    remote.systems),
-    connectors: mergeById(local.connectors, remote.connectors),
-    wires:      mergeById(local.wires,      remote.wires),
-    splices:    mergeById(local.splices,    remote.splices),
-    deletedIds: mergedDeletedIds,
-  };
-  pruneDeletedTree(result, delSet);
-  return result;
+  for (let i = 1; i < navStack.length; i++) {
+    const sys = (navStack[i-1].systems || []).find(x => x.id === navStack[i].sysId);
+    if (!sys) { navStack = navStack.slice(0, i); break; } // subsystem deleted elsewhere
+    Object.assign(navStack[i], {
+      systems: sys.systems, connectors: sys.connectors,
+      wires: sys.wires, splices: sys.splices || [],
+      parentSys: sys, parentScope: navStack[i-1]
+    });
+  }
 }
 
 async function loadFromCloud() {
@@ -334,10 +249,7 @@ async function loadFromCloud() {
     // same logic as saveToCloud already uses) means an in-flight local edit
     // is never silently dropped, while genuinely remote changes (e.g. from
     // another device) still come through.
-    const cloudProjects = data.map(row => ({
-      ...row.data,
-      __remoteUpdatedAt: new Date(row.updated_at).getTime()
-    }));
+    const cloudProjects = data.map(row => row.data);
     const localById = new Map(ST.projects.map(p => [p.id, p]));
     const merged = [];
     const seen = new Set();
@@ -350,36 +262,19 @@ async function loadFromCloud() {
       if (!seen.has(localProj.id)) merged.push(localProj); // local-only, not yet uploaded
     }
     ST.projects = merged;
+    ST.projects.forEach(baselineFingerprints);
     // Defensive: strip anything tombstoned, in case a stale unmerged row
-    // (e.g. from the beforeunload beacon path) slipped a deleted item back in
+    // slipped a deleted item back in
     ST.projects.forEach(p => {
       const delSet = new Set((p.deletedIds || []).map(d => d.id));
       if (delSet.size) pruneDeletedTree(p, delSet);
     });
     try { localStorage.setItem('rw3', JSON.stringify(ST)); } catch(e) {}
 
-    // If currently viewing a project canvas, hot-reload the canvas data
+    // If currently viewing a project canvas, re-point the live scopes at the merged data
     if (activeProjId && currentPage === 'pg-canvas' && navStack.length > 0) {
-      const proj = ST.projects.find(p => p.id === activeProjId);
-      if (proj) {
-        // Update root navStack entry with fresh cloud data
-        navStack[0].systems    = proj.systems;
-        navStack[0].connectors = proj.connectors;
-        navStack[0].wires      = proj.wires;
-        navStack[0].splices    = proj.splices || [];
-        // Re-resolve subsystem references if deeper in nav
-        for (let i = 1; i < navStack.length; i++) {
-          const parentScope = navStack[i-1];
-          const sys = parentScope.systems.find(s => s.id === navStack[i].sysId);
-          if (sys) {
-            navStack[i].systems    = sys.systems;
-            navStack[i].connectors = sys.connectors;
-            navStack[i].wires      = sys.wires;
-            navStack[i].splices    = sys.splices || [];
-          }
-        }
-        redraw();
-      }
+      rebindNavStack();
+      redraw();
     } else {
       renderHome();
     }
@@ -402,7 +297,7 @@ function stopPolling() {
 function load() {
   try {
     const d = JSON.parse(localStorage.getItem('rw3') || 'null');
-    if (d) { ST.isLoggedIn = !!d.isLoggedIn; ST.projects = d.projects || []; }
+    if (d) { ST.isLoggedIn = !!d.isLoggedIn; ST.projects = d.projects || []; ST.projects.forEach(baselineFingerprints); }
     const savedProjId = localStorage.getItem('rw3_proj');
     if (savedProjId && ST.projects.find(p => p.id === savedProjId)) {
       activeProjId = savedProjId;
