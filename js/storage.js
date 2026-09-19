@@ -128,8 +128,15 @@ async function saveToCloud() {
 
 async function pushChanges() {
   if (!sbUser) {
-    notify('Log in to push changes to all devices', 'err');
-    reqAuth(pushChanges);
+    if (ST.isLoggedIn) {
+      // Signed in locally ("rocketteam" login, or a Supabase session that has
+      // expired) but there is no cloud identity, so nothing can be pushed.
+      // Calling reqAuth here would just re-invoke pushChanges forever.
+      notify('Push needs a Supabase account. Log out, then log in with your email account.', 'err');
+    } else {
+      notify('Log in to push changes to all devices', 'err');
+      reqAuth(pushChanges);
+    }
     return;
   }
   if (!ST.projects.length) {
@@ -172,16 +179,21 @@ async function pushChanges() {
         updated_at: new Date().toISOString()
       }));
 
-      const { error } = await sb.from('projects').upsert(payload);
+      // .select() returns the rows the database actually wrote. A write that
+      // RLS or a key mismatch drops would otherwise look like success.
+      const { data: written, error } = await sb.from('projects').upsert(payload).select('id');
       if (error) throw error;
+      if (!written || written.length !== payload.length) {
+        throw new Error('Cloud saved ' + (written ? written.length : 0) + ' of ' + payload.length + ' projects (check RLS policies)');
+      }
       break;
     }
 
     save();
-    notify('Changes pushed to all devices', 'ok');
+    notify('Pushed ' + ST.projects.length + ' project(s) as ' + sbUser.email, 'ok');
   } catch (e) {
     console.warn('Manual push failed:', e);
-    notify('Push failed — please try again', 'err');
+    notify('Push failed: ' + (e && e.message ? e.message : 'unknown error'), 'err');
   } finally {
     if (btn) {
       btn.disabled = false;
@@ -236,10 +248,16 @@ function rebindNavStack() {
 }
 
 async function loadFromCloud() {
-  if (!sbUser) return;
+  if (!sbUser) {
+    notify('Sync needs a Supabase account. Log out, then log in with your email account.', 'err');
+    return;
+  }
   try {
     const { data, error } = await sb.from('projects').select('*').eq('user_id', sbUser.id);
-    if (error || !data) return;
+    if (error || !data) {
+      notify('Sync failed: ' + (error && error.message ? error.message : 'no data returned'), 'err');
+      return;
+    }
     // Merge cloud state with local state rather than blindly overwriting it.
     // save() debounces the actual cloud upload by ~800ms (plus network round
     // trip), so a poll landing in that window would otherwise see a stale
@@ -278,9 +296,50 @@ async function loadFromCloud() {
     } else {
       renderHome();
     }
+    notify('Synced ' + data.length + ' cloud project(s) as ' + sbUser.email, 'ok');
   } catch(e) {
     console.warn('Cloud load failed:', e);
+    notify('Sync failed: ' + (e && e.message ? e.message : 'unknown error'), 'err');
   }
+}
+
+// ── DIAGNOSTICS (run in the browser console) ──────────────────────────
+const RW_SYNC_BUILD = 'sync-2026-09-19b';
+console.log('[RocketWire] storage.js loaded, build', RW_SYNC_BUILD);
+
+// rwDebug(): who am I to the cloud, and what does each side think every
+// connector's type is (with its edit stamp)?
+async function rwDebug() {
+  const desc = c => '#' + c.num + ' ' + c.type + ' @' + (c.updatedAt || 0);
+  const out = {
+    build: RW_SYNC_BUILD,
+    loggedInFlag: ST.isLoggedIn,
+    supabaseUser: sbUser ? sbUser.email : null,
+    supabaseUserId: sbUser ? sbUser.id : null,
+    local: ST.projects.map(p => ({ id: p.id, name: p.name, connectors: collectAllConnectors(p).map(desc) }))
+  };
+  if (sbUser) {
+    const { data, error } = await sb.from('projects').select('id,name,user_id,updated_at,data').eq('user_id', sbUser.id);
+    out.cloudError = error ? error.message : null;
+    out.cloud = (data || []).map(r => ({ id: r.id, name: r.name, updated_at: r.updated_at, connectors: collectAllConnectors(r.data).map(desc) }));
+  }
+  console.log(JSON.stringify(out, null, 2));
+  return out;
+}
+
+// rwForcePull(): make this device match the cloud for every project the cloud
+// has (cloud wins, no merging). Local-only projects are kept.
+async function rwForcePull() {
+  if (!sbUser) { notify('Not signed in to Supabase', 'err'); return; }
+  const { data, error } = await sb.from('projects').select('*').eq('user_id', sbUser.id);
+  if (error || !data) { notify('Pull failed: ' + (error && error.message ? error.message : 'no data'), 'err'); return; }
+  const cloudIds = new Set(data.map(r => r.id));
+  ST.projects = [...data.map(r => r.data), ...ST.projects.filter(p => !cloudIds.has(p.id))];
+  ST.projects.forEach(baselineFingerprints);
+  try { localStorage.setItem('rw3', JSON.stringify(ST)); } catch(e) {}
+  rebindNavStack();
+  if (currentPage === 'pg-canvas') redraw(); else renderHome();
+  notify('Replaced local copy with ' + data.length + ' cloud project(s)', 'ok');
 }
 
 // Poll for changes every 30 seconds when logged in
