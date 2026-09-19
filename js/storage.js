@@ -106,7 +106,7 @@ function save() {
 // last time it was pulled or pushed (ST.syncedHashes). Panning/zooming and
 // other non-data actions never count.
 
-const RW_SYNC_BUILD = 'sync-2026-09-19e';
+const RW_SYNC_BUILD = 'sync-2026-09-19f';
 console.log('[RocketWire] storage.js loaded, build', RW_SYNC_BUILD);
 
 const HASH_SKIP = new Set(['updatedAt','updated_at','_fp','_edge','__remoteUpdatedAt','_remoteUpdatedAt']);
@@ -164,6 +164,9 @@ async function saveToCloud() {
 }
 
 // PUSH: overwrite the cloud copy of every project changed on this device.
+// Projects are sent ONE AT A TIME so a single row the database refuses (e.g. a
+// project whose cloud row belongs to a different user id) can't block the rest,
+// and so the failure can name the project.
 async function pushChanges() {
   if (!sbUser) {
     if (ST.isLoggedIn) {
@@ -180,23 +183,38 @@ async function pushChanges() {
 
   const btn = document.getElementById('push-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Pushing…'; }
+  const h = syncedHashes();
+  const pushed = [], failed = [];
   try {
-    const now = new Date().toISOString();
-    const payload = toPush.map(p => ({ id: p.id, user_id: sbUser.id, name: p.name, data: p, updated_at: now }));
-    // .select() returns the rows the database really wrote, so a write that
-    // RLS or a key mismatch drops can't masquerade as success.
-    const { data: written, error } = await sb.from('projects').upsert(payload).select('id');
-    if (error) throw error;
-    if (!written || written.length !== payload.length) {
-      throw new Error('Cloud saved ' + (written ? written.length : 0) + ' of ' + payload.length + ' projects (check RLS policies)');
+    for (const p of toPush) {
+      try {
+        const row = { id: p.id, user_id: sbUser.id, name: p.name, data: p, updated_at: new Date().toISOString() };
+        // .select() returns the row the database really wrote, so a write that
+        // RLS drops can't masquerade as success.
+        const { data: written, error } = await sb.from('projects').upsert(row).select('id');
+        if (error) throw error;
+        if (!written || written.length !== 1) throw new Error('database wrote 0 rows');
+        h[p.id] = projHash(p);
+        pushed.push(p);
+      } catch (e) {
+        console.warn('[RocketWire] push failed for project', p.id, '"' + p.name + '"',
+          '| signed in as', sbUser.email, sbUser.id, '|', e);
+        failed.push({ p, e });
+      }
     }
-    const h = syncedHashes();
-    toPush.forEach(p => { h[p.id] = projHash(p); });
     persistLocal();
-    notify('Pushed ' + toPush.length + ' project(s) as ' + sbUser.email, 'ok');
-  } catch (e) {
-    console.warn('Push failed:', e);
-    notify('Push failed: ' + (e && e.message ? e.message : 'unknown error'), 'err');
+    if (!failed.length) {
+      notify('Pushed ' + pushed.length + ' project(s) as ' + sbUser.email, 'ok');
+    } else {
+      const first = failed[0];
+      const rls = /row-level security/i.test((first.e && first.e.message) || '') || (first.e && first.e.code === '42501');
+      const why = rls
+        ? 'its cloud row belongs to a different user id than the one you are signed in as'
+        : ((first.e && first.e.message) || 'unknown error');
+      notify((pushed.length ? 'Pushed ' + pushed.length + '. ' : '') +
+        'Blocked: "' + first.p.name + '"' + (failed.length > 1 ? ' (+' + (failed.length - 1) + ' more)' : '') +
+        ' — ' + why + '. See console.', 'err');
+    }
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = 'Push'; }
   }
