@@ -106,7 +106,7 @@ function save() {
 // last time it was pulled or pushed (ST.syncedHashes). Panning/zooming and
 // other non-data actions never count.
 
-const RW_SYNC_BUILD = 'sync-2026-09-19d';
+const RW_SYNC_BUILD = 'sync-2026-09-19e';
 console.log('[RocketWire] storage.js loaded, build', RW_SYNC_BUILD);
 
 const HASH_SKIP = new Set(['updatedAt','updated_at','_fp','_edge','__remoteUpdatedAt','_remoteUpdatedAt']);
@@ -408,6 +408,7 @@ function goPage(id) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   currentPage = id;
+  addTopbarSyncButton(); // no-op if it already exists
   const syncBtnEl = document.getElementById('sync-btn');
   if (syncBtnEl) syncBtnEl.style.display = (id === 'pg-canvas') ? '' : 'none';
   // Always persist current page immediately so refresh knows where to return
@@ -572,8 +573,10 @@ async function syncFromTopbar() {
   finally { if (btn) { btn.disabled = false; btn.textContent = '↻ Sync'; } }
 }
 function addTopbarSyncButton() {
+  if (document.getElementById('sync-btn')) return;
+  const pushBtn = document.getElementById('push-btn');
   const wrap = document.getElementById('push-wrap');
-  if (!wrap || document.getElementById('sync-btn')) return;
+  if (!pushBtn && !wrap) return; // top bar not in the DOM yet; goPage() will retry
   const b = document.createElement('button');
   b.id = 'sync-btn';
   b.className = 'btn btn-ol btn-sm';
@@ -581,7 +584,8 @@ function addTopbarSyncButton() {
   b.title = 'Pull the latest pushed version from the cloud';
   b.style.cssText = 'margin-right:6px;min-width:72px;display:' + (currentPage === 'pg-canvas' ? '' : 'none');
   b.onclick = syncFromTopbar;
-  wrap.insertBefore(b, wrap.firstChild);
+  if (pushBtn && pushBtn.parentNode) pushBtn.parentNode.insertBefore(b, pushBtn);
+  else wrap.insertBefore(b, wrap.firstChild);
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', addTopbarSyncButton);
 else addTopbarSyncButton();
