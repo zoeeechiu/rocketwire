@@ -92,46 +92,81 @@ function save() {
   } catch(e) {}
 }
 
+// ═══════════════════════════════════════════════════════
+// CLOUD SYNC
+// ═══════════════════════════════════════════════════════
+// Model (deliberately simple, no timestamp merging):
+//   Push : this device's copy of every project you CHANGED overwrites the
+//          cloud copy. Whoever pushes last wins.
+//   Pull : the cloud copy replaces this device's copy. Runs on login, on page
+//          load, when the tab is re-focused, and on the Sync button.
+//   Safety: a project with unpushed local edits is never overwritten silently.
+//          Auto-pull skips it; the Sync button asks first.
+// "Changed" = the project's content hash differs from the hash recorded the
+// last time it was pulled or pushed (ST.syncedHashes). Panning/zooming and
+// other non-data actions never count.
+
+const RW_SYNC_BUILD = 'sync-2026-09-19c';
+console.log('[RocketWire] storage.js loaded, build', RW_SYNC_BUILD);
+
+const HASH_SKIP = new Set(['updatedAt','updated_at','_fp','_edge','__remoteUpdatedAt','_remoteUpdatedAt']);
+// Canonical JSON: sorted keys (Postgres jsonb does not keep key order), and
+// trailing default values in channels/colors ignored (the UI pads those
+// arrays just by viewing a connector, which is not a user edit).
+function canonJSON(v, key) {
+  if (v === null || typeof v !== 'object') return JSON.stringify(v);
+  if (Array.isArray(v)) {
+    let n = v.length;
+    if (key === 'channels') { while (n > 0 && (v[n-1] === '' || v[n-1] == null)) n--; }
+    else if (key === 'colors') { while (n > 0 && (v[n-1] === 'red' || v[n-1] == null)) n--; }
+    return '[' + v.slice(0, n).map(x => canonJSON(x)).join(',') + ']';
+  }
+  return '{' + Object.keys(v).filter(k => !HASH_SKIP.has(k) && v[k] !== undefined).sort()
+    .map(k => JSON.stringify(k) + ':' + canonJSON(v[k], k)).join(',') + '}';
+}
+function cyrb53(str) {
+  let h1 = 0xdeadbeef, h2 = 0x41c6ce57;
+  for (let i = 0; i < str.length; i++) {
+    const ch = str.charCodeAt(i);
+    h1 = Math.imul(h1 ^ ch, 2654435761); h2 = Math.imul(h2 ^ ch, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return 4294967296 * (2097151 & h2) + (h1 >>> 0);
+}
+function projHash(p) { return cyrb53(canonJSON(p)); }
+function syncedHashes() { if (!ST.syncedHashes) ST.syncedHashes = {}; return ST.syncedHashes; }
+function dirtyProjects() {
+  const h = syncedHashes();
+  return ST.projects.filter(p => projHash(p) !== h[p.id]);
+}
+function persistLocal() { try { localStorage.setItem('rw3', JSON.stringify(ST)); } catch(e) {} }
+
+// Upload projects that exist only on this device and were never synced
+// (used right after "New project"). Never touches already-synced projects.
 async function saveToCloud() {
   if (!sbUser || !ST.projects.length) return;
   try {
-    for (const proj of ST.projects) {
-      const { data: existing } = await sb.from('projects')
-        .select('data, updated_at')
-        .eq('id', proj.id)
-        .single();
-
-      let dataToSave = proj;
-
-      if (existing && existing.data) {
-        // On manual publish, merge the current local project with the latest
-        // remote row, but do not keep reloading the cloud while the user is
-        // still making edits. This preserves the final local draft as the main
-        // source of truth for the push.
-        dataToSave = mergeProjectData(proj, existing.data);
-        const idx = ST.projects.findIndex(p => p.id === proj.id);
-        if (idx >= 0) ST.projects[idx] = dataToSave;
-      }
-
-      await sb.from('projects').upsert({
-        id: proj.id,
-        user_id: sbUser.id,
-        name: dataToSave.name,
-        data: dataToSave,
-        updated_at: new Date().toISOString()
-      });
-    }
+    const { data: existing } = await sb.from('projects').select('id').eq('user_id', sbUser.id);
+    const inCloud = new Set((existing || []).map(r => r.id));
+    const h = syncedHashes();
+    const fresh = ST.projects.filter(p => !inCloud.has(p.id) && !(p.id in h));
+    if (!fresh.length) return;
+    const now = new Date().toISOString();
+    const { error } = await sb.from('projects').upsert(
+      fresh.map(p => ({ id: p.id, user_id: sbUser.id, name: p.name, data: p, updated_at: now })));
+    if (error) throw error;
+    fresh.forEach(p => { h[p.id] = projHash(p); });
+    persistLocal();
   } catch(e) {
     console.warn('Cloud save failed:', e);
   }
 }
 
+// PUSH: overwrite the cloud copy of every project changed on this device.
 async function pushChanges() {
   if (!sbUser) {
     if (ST.isLoggedIn) {
-      // Signed in locally ("rocketteam" login, or a Supabase session that has
-      // expired) but there is no cloud identity, so nothing can be pushed.
-      // Calling reqAuth here would just re-invoke pushChanges forever.
       notify('Push needs a Supabase account. Log out, then log in with your email account.', 'err');
     } else {
       notify('Log in to push changes to all devices', 'err');
@@ -139,66 +174,31 @@ async function pushChanges() {
     }
     return;
   }
-  if (!ST.projects.length) {
-    notify('No projects to push', 'warn');
-    return;
-  }
+  save(); // flush the live canvas scope into its project first
+  const toPush = dirtyProjects();
+  if (!toPush.length) { notify('Nothing to push — no changes since last sync', 'warn'); return; }
 
   const btn = document.getElementById('push-btn');
-  if (btn) {
-    btn.disabled = true;
-    btn.textContent = 'Pushing…';
-  }
-
+  if (btn) { btn.disabled = true; btn.textContent = 'Pushing…'; }
   try {
-    for (let attempt = 0; attempt < 3; attempt++) {
-      const { data: cloudRows, error: selErr } = await sb.from('projects').select('*').eq('user_id', sbUser.id);
-      if (selErr) throw selErr;
-      const remoteById = new Map((cloudRows || []).map(row => [row.id, row.data]));
-
-      const mergedProjects = ST.projects.map(proj => {
-        const remote = remoteById.get(proj.id);
-        return remote ? mergeProjectData(proj, remote) : proj;
-      });
-
-      for (const row of cloudRows || []) {
-        if (!mergedProjects.some(proj => proj.id === row.id)) {
-          mergedProjects.push(row.data);
-        }
-      }
-
-      ST.projects = mergedProjects;
-      ST.projects.forEach(baselineFingerprints);
-      rebindNavStack();
-
-      const payload = ST.projects.map(proj => ({
-        id: proj.id,
-        user_id: sbUser.id,
-        name: proj.name,
-        data: proj,
-        updated_at: new Date().toISOString()
-      }));
-
-      // .select() returns the rows the database actually wrote. A write that
-      // RLS or a key mismatch drops would otherwise look like success.
-      const { data: written, error } = await sb.from('projects').upsert(payload).select('id');
-      if (error) throw error;
-      if (!written || written.length !== payload.length) {
-        throw new Error('Cloud saved ' + (written ? written.length : 0) + ' of ' + payload.length + ' projects (check RLS policies)');
-      }
-      break;
+    const now = new Date().toISOString();
+    const payload = toPush.map(p => ({ id: p.id, user_id: sbUser.id, name: p.name, data: p, updated_at: now }));
+    // .select() returns the rows the database really wrote, so a write that
+    // RLS or a key mismatch drops can't masquerade as success.
+    const { data: written, error } = await sb.from('projects').upsert(payload).select('id');
+    if (error) throw error;
+    if (!written || written.length !== payload.length) {
+      throw new Error('Cloud saved ' + (written ? written.length : 0) + ' of ' + payload.length + ' projects (check RLS policies)');
     }
-
-    save();
-    notify('Pushed ' + ST.projects.length + ' project(s) as ' + sbUser.email, 'ok');
+    const h = syncedHashes();
+    toPush.forEach(p => { h[p.id] = projHash(p); });
+    persistLocal();
+    notify('Pushed ' + toPush.length + ' project(s) as ' + sbUser.email, 'ok');
   } catch (e) {
-    console.warn('Manual push failed:', e);
+    console.warn('Push failed:', e);
     notify('Push failed: ' + (e && e.message ? e.message : 'unknown error'), 'err');
   } finally {
-    if (btn) {
-      btn.disabled = false;
-      btn.textContent = 'Push';
-    }
+    if (btn) { btn.disabled = false; btn.textContent = 'Push'; }
   }
 }
 
@@ -224,98 +224,140 @@ function pruneDeletedTree(node, delSet) {
   node.systems.forEach(sys => pruneDeletedTree(sys, delSet));
 }
 
-// mergeProjectData lives in project-sync.js (single, recursive, ID-based merge).
-
-// After ST.projects is replaced by a merge, the live navStack still points at
-// the OLD arrays. Re-point every level at the merged objects.
+// After ST.projects is replaced by a pull, the live navStack still points at
+// the OLD arrays. Re-point every level at the new objects.
 function rebindNavStack() {
   if (!activeProjId || !navStack.length) return;
   const proj = ST.projects.find(p => p.id === activeProjId);
   if (!proj) return;
   Object.assign(navStack[0], {
-    systems: proj.systems, connectors: proj.connectors,
+    label: proj.name, systems: proj.systems, connectors: proj.connectors,
     wires: proj.wires, splices: proj.splices || []
   });
   for (let i = 1; i < navStack.length; i++) {
     const sys = (navStack[i-1].systems || []).find(x => x.id === navStack[i].sysId);
     if (!sys) { navStack = navStack.slice(0, i); break; } // subsystem deleted elsewhere
     Object.assign(navStack[i], {
-      systems: sys.systems, connectors: sys.connectors,
+      label: sys.name, systems: sys.systems, connectors: sys.connectors,
       wires: sys.wires, splices: sys.splices || [],
       parentSys: sys, parentScope: navStack[i-1]
     });
   }
 }
 
-async function loadFromCloud() {
+// PULL: cloud replaces local, except projects with unpushed edits.
+//   manual   : Sync button — reports the outcome, asks before discarding edits
+//   takeCloud: discard unpushed edits without asking (rwForcePull)
+let _syncBusy = false, _lastAutoPull = 0;
+async function pullFromCloud({ manual = false, takeCloud = false } = {}) {
   if (!sbUser) {
-    notify('Sync needs a Supabase account. Log out, then log in with your email account.', 'err');
-    return;
+    if (manual) notify('Sync needs a Supabase account. Log out, then log in with your email account.', 'err');
+    return false;
   }
+  if (_syncBusy) return false;
+  _syncBusy = true;
   try {
     const { data, error } = await sb.from('projects').select('*').eq('user_id', sbUser.id);
     if (error || !data) {
-      notify('Sync failed: ' + (error && error.message ? error.message : 'no data returned'), 'err');
-      return;
+      if (manual) notify('Sync failed: ' + (error && error.message ? error.message : 'no data returned'), 'err');
+      return false;
     }
-    // Merge cloud state with local state rather than blindly overwriting it.
-    // save() debounces the actual cloud upload by ~800ms (plus network round
-    // trip), so a poll landing in that window would otherwise see a stale
-    // server copy and wipe out whatever edit is still waiting to go out --
-    // worst case for a brand-new project, which doesn't exist server-side
-    // yet at all and would simply vanish. Merging (local wins per-item,
-    // same logic as saveToCloud already uses) means an in-flight local edit
-    // is never silently dropped, while genuinely remote changes (e.g. from
-    // another device) still come through.
-    const cloudProjects = data.map(row => row.data);
-    const localById = new Map(ST.projects.map(p => [p.id, p]));
-    const merged = [];
-    const seen = new Set();
-    for (const cloudProj of cloudProjects) {
-      const localProj = localById.get(cloudProj.id);
-      merged.push(localProj ? mergeProjectData(localProj, cloudProj) : cloudProj);
-      seen.add(cloudProj.id);
-    }
-    for (const localProj of ST.projects) {
-      if (!seen.has(localProj.id)) merged.push(localProj); // local-only, not yet uploaded
-    }
-    ST.projects = merged;
-    ST.projects.forEach(baselineFingerprints);
-    // Defensive: strip anything tombstoned, in case a stale unmerged row
-    // slipped a deleted item back in
-    ST.projects.forEach(p => {
-      const delSet = new Set((p.deletedIds || []).map(d => d.id));
-      if (delSet.size) pruneDeletedTree(p, delSet);
-    });
-    try { localStorage.setItem('rw3', JSON.stringify(ST)); } catch(e) {}
+    const h = syncedHashes();
+    const byId = new Map(ST.projects.map(p => [p.id, p]));
+    const cloudIds = new Set(data.map(r => r.id));
+    const isDirty = p => projHash(p) !== h[p.id];
 
-    // If currently viewing a project canvas, re-point the live scopes at the merged data
-    if (activeProjId && currentPage === 'pg-canvas' && navStack.length > 0) {
-      rebindNavStack();
-      redraw();
-    } else {
-      renderHome();
+    // Projects where cloud differs from this device AND this device has unpushed edits
+    const conflicts = data.map(r => byId.get(r.id))
+      .filter((p, i) => p && isDirty(p) && projHash(data[i].data) !== projHash(p));
+    let useCloudForConflicts = takeCloud;
+    if (conflicts.length && !takeCloud) {
+      if (manual) {
+        useCloudForConflicts = confirm(
+          'These projects have changes on this device that were never pushed:\n\n  ' +
+          conflicts.map(p => p.name).join('\n  ') +
+          '\n\nOK = discard them and use the cloud version.\nCancel = keep mine (Push will overwrite the cloud).');
+      } else {
+        notify('The cloud has a different version of "' + conflicts[0].name + '". Click Sync to review, or Push to overwrite it.', 'warn');
+      }
     }
-    notify('Synced ' + data.length + ' cloud project(s) as ' + sbUser.email, 'ok');
-  } catch(e) {
-    console.warn('Cloud load failed:', e);
-    notify('Sync failed: ' + (e && e.message ? e.message : 'unknown error'), 'err');
+
+    let changed = false;
+    const next = [];
+    for (const r of data) {
+      const local = byId.get(r.id);
+      if (!local) { next.push(r.data); h[r.id] = projHash(r.data); changed = true; continue; }
+      const same = projHash(r.data) === projHash(local);
+      if (same) { next.push(local); h[r.id] = projHash(local); continue; }
+      if (!isDirty(local) || useCloudForConflicts) {
+        next.push(r.data); h[r.id] = projHash(r.data); changed = true;
+      } else {
+        next.push(local); // keep unpushed edits
+      }
+    }
+    // Local projects the cloud doesn't have
+    for (const p of ST.projects) {
+      if (cloudIds.has(p.id)) continue;
+      if (p.id in h) {
+        // It was synced before, so it was deleted on another device.
+        if (!isDirty(p) || useCloudForConflicts) { delete h[p.id]; changed = true; continue; }
+        delete h[p.id]; // keep the unpushed edits; Push will re-create it
+      }
+      next.push(p);
+    }
+    ST.projects = next;
+    ST.projects.forEach(baselineFingerprints);
+    persistLocal();
+
+    if (changed) {
+      if (activeProjId && !ST.projects.find(p => p.id === activeProjId)) {
+        navStack = []; activeProjId = null; goPage('pg-home');
+      } else if (currentPage === 'pg-canvas' && navStack.length) {
+        rebindNavStack(); buildBC(currentPage); redraw();
+      } else if (currentPage === 'pg-home') {
+        renderHome();
+      }
+    }
+    if (manual) notify(changed ? 'Synced — updated from the cloud' : 'Already up to date', 'ok');
+    else if (changed) notify('Updated from the cloud', 'ok');
+    return true;
+  } catch (e) {
+    console.warn('Cloud pull failed:', e);
+    if (manual) notify('Sync failed: ' + (e && e.message ? e.message : 'unknown error'), 'err');
+    return false;
+  } finally {
+    _syncBusy = false;
   }
 }
+// Sync button
+function loadFromCloud() { return pullFromCloud({ manual: true }); }
+
+// Automatic pulls (login, page load, tab re-focus). Never while the user is
+// in the middle of editing a connector / splice / new system.
+function autoPull() {
+  if (!sbUser) return;
+  if (['pg-conn', 'pg-add', 'pg-splice'].includes(currentPage)) return;
+  if (Date.now() - _lastAutoPull < 3000) return;
+  _lastAutoPull = Date.now();
+  pullFromCloud();
+}
+sb.auth.onAuthStateChange((event, session) => {
+  if (session && session.user) sbUser = session.user;
+  if (event === 'INITIAL_SESSION' || event === 'SIGNED_IN') setTimeout(autoPull, 0); // never await supabase calls inside this callback
+});
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') autoPull(); });
 
 // ── DIAGNOSTICS (run in the browser console) ──────────────────────────
-const RW_SYNC_BUILD = 'sync-2026-09-19b';
-console.log('[RocketWire] storage.js loaded, build', RW_SYNC_BUILD);
-
-// rwDebug(): who am I to the cloud, and what does each side think every
-// connector's type is (with its edit stamp)?
+// rwDebug(): who am I to the cloud, what does each side think every
+// connector's type is, and which projects count as "changed" locally?
 async function rwDebug() {
-  const desc = c => '#' + c.num + ' ' + c.type + ' @' + (c.updatedAt || 0);
+  const desc = c => '#' + c.num + ' ' + c.type;
   const out = {
     build: RW_SYNC_BUILD,
     loggedInFlag: ST.isLoggedIn,
     supabaseUser: sbUser ? sbUser.email : null,
     supabaseUserId: sbUser ? sbUser.id : null,
+    unpushedProjects: dirtyProjects().map(p => p.name),
     local: ST.projects.map(p => ({ id: p.id, name: p.name, connectors: collectAllConnectors(p).map(desc) }))
   };
   if (sbUser) {
@@ -326,21 +368,8 @@ async function rwDebug() {
   console.log(JSON.stringify(out, null, 2));
   return out;
 }
-
-// rwForcePull(): make this device match the cloud for every project the cloud
-// has (cloud wins, no merging). Local-only projects are kept.
-async function rwForcePull() {
-  if (!sbUser) { notify('Not signed in to Supabase', 'err'); return; }
-  const { data, error } = await sb.from('projects').select('*').eq('user_id', sbUser.id);
-  if (error || !data) { notify('Pull failed: ' + (error && error.message ? error.message : 'no data'), 'err'); return; }
-  const cloudIds = new Set(data.map(r => r.id));
-  ST.projects = [...data.map(r => r.data), ...ST.projects.filter(p => !cloudIds.has(p.id))];
-  ST.projects.forEach(baselineFingerprints);
-  try { localStorage.setItem('rw3', JSON.stringify(ST)); } catch(e) {}
-  rebindNavStack();
-  if (currentPage === 'pg-canvas') redraw(); else renderHome();
-  notify('Replaced local copy with ' + data.length + ' cloud project(s)', 'ok');
-}
+// rwForcePull(): make this device match the cloud, discarding unpushed edits.
+function rwForcePull() { return pullFromCloud({ manual: true, takeCloud: true }); }
 
 // Poll for changes every 30 seconds when logged in
 let _pollTimer = null;
@@ -356,7 +385,11 @@ function stopPolling() {
 function load() {
   try {
     const d = JSON.parse(localStorage.getItem('rw3') || 'null');
-    if (d) { ST.isLoggedIn = !!d.isLoggedIn; ST.projects = d.projects || []; ST.projects.forEach(baselineFingerprints); }
+    if (d) {
+      ST.isLoggedIn = !!d.isLoggedIn; ST.projects = d.projects || [];
+      ST.syncedHashes = d.syncedHashes || {};
+      ST.projects.forEach(baselineFingerprints);
+    }
     const savedProjId = localStorage.getItem('rw3_proj');
     if (savedProjId && ST.projects.find(p => p.id === savedProjId)) {
       activeProjId = savedProjId;
@@ -433,8 +466,11 @@ async function doLogin() {
   const pass  = document.getElementById('l-pass').value;
   const err   = document.getElementById('l-err');
 
-  // Try Supabase auth first
-  const { data, error } = await sb.auth.signInWithPassword({ email, password: pass });
+  // Try Supabase auth first. If a shared team Supabase account is configured
+  // (TEAM_SUPABASE_EMAIL in constants.js), the "rocketteam" username maps to
+  // it, so that login can sync across devices instead of being local-only.
+  const loginEmail = (email === CREDS.user && TEAM_SUPABASE_EMAIL) ? TEAM_SUPABASE_EMAIL : email;
+  const { data, error } = await sb.auth.signInWithPassword({ email: loginEmail, password: pass });
   if (!error && data.user) {
     sbUser = data.user;
     ST.isLoggedIn = true; save(); applyLogin();
