@@ -103,6 +103,69 @@ async function saveToCloud() {
   }
 }
 
+async function pushChanges() {
+  if (!sbUser) {
+    notify('Log in to push changes to all devices', 'err');
+    reqAuth(pushChanges);
+    return;
+  }
+  if (!ST.projects.length) {
+    notify('No projects to push', 'warn');
+    return;
+  }
+
+  const btn = document.getElementById('push-btn');
+  if (btn) {
+    btn.disabled = true;
+    btn.textContent = 'Pushing…';
+  }
+
+  try {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const { data: cloudRows } = await sb.from('projects').select('*').eq('user_id', sbUser.id);
+      const remoteById = new Map((cloudRows || []).map(row => [row.id, row.data]));
+
+      const mergedProjects = ST.projects.map(proj => {
+        const remote = remoteById.get(proj.id);
+        return remote ? mergeProjectData(proj, remote) : proj;
+      });
+
+      for (const row of cloudRows || []) {
+        if (!mergedProjects.some(proj => proj.id === row.id)) {
+          mergedProjects.push(row.data);
+        }
+      }
+
+      ST.projects = mergedProjects;
+
+      const payload = ST.projects.map(proj => ({
+        id: proj.id,
+        user_id: sbUser.id,
+        name: proj.name,
+        data: proj,
+        updated_at: new Date().toISOString()
+      }));
+
+      const { error } = await sb.from('projects').upsert(payload);
+      if (error) throw error;
+
+      await loadFromCloud();
+      break;
+    }
+
+    save();
+    notify('Changes pushed to all devices', 'ok');
+  } catch (e) {
+    console.warn('Manual push failed:', e);
+    notify('Push failed — please try again', 'err');
+  } finally {
+    if (btn) {
+      btn.disabled = false;
+      btn.textContent = 'Push';
+    }
+  }
+}
+
 // Record that an item was deleted, so future merges don't resurrect it.
 // Stored on the project itself (proj.deletedIds) so it travels with save/load/merge.
 function markDeleted(ids) {
@@ -356,6 +419,7 @@ async function doSignup() {
 
 function applyLogin() {
   document.getElementById('area-login').style.display = 'none';
+  document.getElementById('push-wrap').style.display = 'flex';
   const ua = document.getElementById('area-user'); ua.style.display = 'flex'; ua.style.alignItems = 'center';
   document.getElementById('udisp').textContent = sbUser ? sbUser.email : CREDS.user;
 }
@@ -366,6 +430,7 @@ async function doLogout() {
   sbUser = null;
   ST.isLoggedIn = false; save();
   document.getElementById('area-login').style.display = 'flex';
+  document.getElementById('push-wrap').style.display = 'none';
   document.getElementById('area-user').style.display = 'none';
   notify('Logged out');
 }

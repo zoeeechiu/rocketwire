@@ -14,6 +14,9 @@
   </div>
   <div class="tb-right">
     <a class="btn btn-gh btn-sm" href="https://confluence.cornell.edu/spaces/crt/pages/727351319/RocketWire" target="_blank" rel="noopener noreferrer">Help</a>
+    <div id="push-wrap" style="display:none">
+      <button id="push-btn" class="btn btn-red btn-sm" onclick="pushChanges()">Push</button>
+    </div>
     <div id="area-login"><button class="btn btn-ol" onclick="openM('m-login')">Log in</button></div>
     <div id="area-user" style="display:none;align-items:center;gap:8px">
       <div class="user-pill"><div class="odot"></div><span id="udisp">team</span></div>
@@ -265,6 +268,7 @@
   <script src="js/supabase.js?v=1783795784"></script>
   <script src="js/constants.js?v=1783795784"></script>
   <script src="js/state.js?v=1783795784"></script>
+  <script src="js/project-sync.js?v=1783795784"></script>
   <script src="js/storage.js?v=1783795784"></script>
   <script src="js/pages/home.js?v=1783795784"></script>
   <script src="js/canvas/routing.js?v=1783795784"></script>
