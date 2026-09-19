@@ -106,7 +106,7 @@ function save() {
 // last time it was pulled or pushed (ST.syncedHashes). Panning/zooming and
 // other non-data actions never count.
 
-const RW_SYNC_BUILD = 'sync-2026-09-19f';
+const RW_SYNC_BUILD = 'sync-2026-09-19g';
 console.log('[RocketWire] storage.js loaded, build', RW_SYNC_BUILD);
 
 const HASH_SKIP = new Set(['updatedAt','updated_at','_fp','_edge','__remoteUpdatedAt','_remoteUpdatedAt']);
@@ -167,7 +167,9 @@ async function saveToCloud() {
 // Projects are sent ONE AT A TIME so a single row the database refuses (e.g. a
 // project whose cloud row belongs to a different user id) can't block the rest,
 // and so the failure can name the project.
-async function pushChanges() {
+//   On a project page  -> only THAT project is pushed.
+//   On the home page   -> every project changed on this device is pushed.
+async function pushChanges(projId) {
   if (!sbUser) {
     if (ST.isLoggedIn) {
       notify('Push needs a Supabase account. Log out, then log in with your email account.', 'err');
@@ -178,8 +180,15 @@ async function pushChanges() {
     return;
   }
   save(); // flush the live canvas scope into its project first
-  const toPush = dirtyProjects();
-  if (!toPush.length) { notify('Nothing to push — no changes since last sync', 'warn'); return; }
+  const targetId = (typeof projId === 'string') ? projId
+    : ((currentPage !== 'pg-home' && activeProjId) ? activeProjId : null);
+  const target = targetId ? ST.projects.find(p => p.id === targetId) : null;
+  const toPush = dirtyProjects().filter(p => !targetId || p.id === targetId);
+  if (!toPush.length) {
+    notify(target ? '"' + target.name + '" has no changes since it was last pushed or synced'
+                  : 'Nothing to push — no changes since last sync', 'warn');
+    return;
+  }
 
   const btn = document.getElementById('push-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Pushing…'; }
@@ -204,7 +213,8 @@ async function pushChanges() {
     }
     persistLocal();
     if (!failed.length) {
-      notify('Pushed ' + pushed.length + ' project(s) as ' + sbUser.email, 'ok');
+      notify(target ? 'Pushed "' + target.name + '" as ' + sbUser.email
+                    : 'Pushed ' + pushed.length + ' project(s) as ' + sbUser.email, 'ok');
     } else {
       const first = failed[0];
       const rls = /row-level security/i.test((first.e && first.e.message) || '') || (first.e && first.e.code === '42501');
@@ -216,7 +226,8 @@ async function pushChanges() {
         ' — ' + why + '. See console.', 'err');
     }
   } finally {
-    if (btn) { btn.disabled = false; btn.textContent = 'Push'; }
+    if (btn) btn.disabled = false;
+    syncButtonLabels();
   }
 }
 
@@ -267,7 +278,7 @@ function rebindNavStack() {
 //   manual   : Sync button — reports the outcome, asks before discarding edits
 //   takeCloud: discard unpushed edits without asking (rwForcePull)
 let _syncBusy = false, _lastAutoPull = 0;
-async function pullFromCloud({ manual = false, takeCloud = false } = {}) {
+async function pullFromCloud({ manual = false, takeCloud = false, projId = null } = {}) {
   if (!sbUser) {
     if (manual) notify('Sync needs a Supabase account. Log out, then log in with your email account.', 'err');
     return false;
@@ -275,12 +286,19 @@ async function pullFromCloud({ manual = false, takeCloud = false } = {}) {
   if (_syncBusy) return false;
   _syncBusy = true;
   try {
-    const { data, error } = await sb.from('projects').select('*').eq('user_id', sbUser.id);
+    let q = sb.from('projects').select('*').eq('user_id', sbUser.id);
+    if (projId) q = q.eq('id', projId);   // single-project sync
+    const { data, error } = await q;
     if (error || !data) {
       if (manual) notify('Sync failed: ' + (error && error.message ? error.message : 'no data returned'), 'err');
       return false;
     }
     const h = syncedHashes();
+    const scoped = projId ? ST.projects.find(p => p.id === projId) : null;
+    if (projId && !data.length && !(projId in h)) {
+      if (manual) notify('"' + (scoped ? scoped.name : 'This project') + '" has never been pushed, so there is nothing to sync yet', 'warn');
+      return false;
+    }
     const byId = new Map(ST.projects.map(p => [p.id, p]));
     const cloudIds = new Set(data.map(r => r.id));
     const isDirty = p => projHash(p) !== h[p.id];
@@ -316,6 +334,7 @@ async function pullFromCloud({ manual = false, takeCloud = false } = {}) {
     // Local projects the cloud doesn't have
     for (const p of ST.projects) {
       if (cloudIds.has(p.id)) continue;
+      if (projId && p.id !== projId) { next.push(p); continue; } // other projects are not part of this sync
       if (p.id in h) {
         // It was synced before, so it was deleted on another device.
         if (!isDirty(p) || useCloudForConflicts) { delete h[p.id]; changed = true; continue; }
@@ -323,6 +342,9 @@ async function pullFromCloud({ manual = false, takeCloud = false } = {}) {
       }
       next.push(p);
     }
+    // keep the home-page card order stable
+    const order = new Map(ST.projects.map((p, i) => [p.id, i]));
+    next.sort((a, b) => (order.has(a.id) ? order.get(a.id) : 1e9) - (order.has(b.id) ? order.get(b.id) : 1e9));
     ST.projects = next;
     ST.projects.forEach(baselineFingerprints);
     persistLocal();
@@ -336,7 +358,10 @@ async function pullFromCloud({ manual = false, takeCloud = false } = {}) {
         renderHome();
       }
     }
-    if (manual) notify(changed ? 'Synced — updated from the cloud' : 'Already up to date', 'ok');
+    if (manual) {
+      const nm = scoped ? '"' + scoped.name + '" ' : '';
+      notify(changed ? 'Synced ' + nm + '— updated from the cloud' : (nm ? nm.trim() + ' is already up to date' : 'Already up to date'), 'ok');
+    }
     else if (changed) notify('Updated from the cloud', 'ok');
     return true;
   } catch (e) {
@@ -428,7 +453,8 @@ function goPage(id) {
   currentPage = id;
   addTopbarSyncButton(); // no-op if it already exists
   const syncBtnEl = document.getElementById('sync-btn');
-  if (syncBtnEl) syncBtnEl.style.display = (id === 'pg-canvas') ? '' : 'none';
+  if (syncBtnEl) syncBtnEl.style.display = (id === 'pg-canvas' || id === 'pg-home') ? '' : 'none';
+  syncButtonLabels();
   // Always persist current page immediately so refresh knows where to return
   try { localStorage.setItem('rw3_page', id); } catch(e) {}
   buildBC(id);
@@ -584,11 +610,32 @@ document.addEventListener('click', e => { if (!document.getElementById('ctx').co
 // ═══════════════════════════════════════════════════════
 // Created here so index.html doesn't need to change. It lives inside
 // #push-wrap, so it is only available while logged in, exactly like Push.
+// Home page  -> Push all / Sync all   (every project)
+// Project page -> Push / Sync          (only the open project)
+function syncButtonLabels() {
+  const home = currentPage === 'pg-home';
+  const push = document.getElementById('push-btn');
+  const sync = document.getElementById('sync-btn');
+  if (push && !push.disabled) {
+    push.textContent = home ? 'Push all' : 'Push';
+    push.title = home ? 'Upload every project you changed on this device'
+                      : 'Upload only this project to the cloud';
+  }
+  if (sync && !sync.disabled) {
+    sync.textContent = home ? '↻ Sync all' : '↻ Sync';
+    sync.title = home ? 'Download the latest pushed version of every project'
+                      : 'Download the latest pushed version of this project only';
+  }
+}
 async function syncFromTopbar() {
   const btn = document.getElementById('sync-btn');
   if (btn) { btn.disabled = true; btn.textContent = 'Syncing…'; }
-  try { await loadFromCloud(); }
-  finally { if (btn) { btn.disabled = false; btn.textContent = '↻ Sync'; } }
+  try {
+    await pullFromCloud({ manual: true, projId: (currentPage === 'pg-home') ? null : activeProjId });
+  } finally {
+    if (btn) btn.disabled = false;
+    syncButtonLabels();
+  }
 }
 function addTopbarSyncButton() {
   if (document.getElementById('sync-btn')) return;
@@ -599,11 +646,16 @@ function addTopbarSyncButton() {
   b.id = 'sync-btn';
   b.className = 'btn btn-ol btn-sm';
   b.textContent = '↻ Sync';
-  b.title = 'Pull the latest pushed version from the cloud';
-  b.style.cssText = 'margin-right:6px;min-width:72px;display:' + (currentPage === 'pg-canvas' ? '' : 'none');
+  b.style.cssText = 'margin-right:6px;min-width:72px;display:' +
+    ((currentPage === 'pg-canvas' || currentPage === 'pg-home') ? '' : 'none');
   b.onclick = syncFromTopbar;
   if (pushBtn && pushBtn.parentNode) pushBtn.parentNode.insertBefore(b, pushBtn);
   else wrap.insertBefore(b, wrap.firstChild);
+  // The home page header has its own older Sync button; the top-bar pair now
+  // covers the home page too, so hide the duplicate.
+  const old = document.querySelector('#pg-home button[title="Sync from cloud"]');
+  if (old) old.style.display = 'none';
+  syncButtonLabels();
 }
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', addTopbarSyncButton);
 else addTopbarSyncButton();
