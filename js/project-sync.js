@@ -35,7 +35,11 @@
           const b = rv[i];
           if (a === undefined || a === null || a === '') return b ?? a;
           if (b === undefined || b === null || b === '') return a;
-          if (a !== b) return a || b;
+          if (a !== b) {
+            const aFilled = String(a ?? '').trim().length;
+            const bFilled = String(b ?? '').trim().length;
+            return bFilled > aFilled ? b : a;
+          }
           return a;
         });
         result[key] = merged;
@@ -57,6 +61,9 @@
     });
     const mergedDeletedIds = [...delMap.values()];
     const delSet = new Set(mergedDeletedIds.map(d => d.id));
+    const localProjectStamp = Number(local.updatedAt || local.updated_at || 0);
+    const remoteProjectStamp = Number(remote.updatedAt || remote.updated_at || remote.__remoteUpdatedAt || 0);
+    const projectPrefersLocal = localProjectStamp >= remoteProjectStamp;
 
     function mergeById(localArr, remoteArr) {
       const merged = [...(localArr || [])];
@@ -77,7 +84,7 @@
         } else if (remoteStamp < localStamp) {
           continue;
         } else if (idx >= 0) {
-          merged[idx] = mergeItemValues(localItem, remoteItem);
+          merged[idx] = projectPrefersLocal ? { ...localItem, ...mergeItemValues(localItem, remoteItem) } : mergeItemValues(localItem, remoteItem);
         }
       }
       return merged;

@@ -198,6 +198,10 @@ function pruneDeletedTree(node, delSet) {
 // Merge two versions of a project — combine arrays by ID, local wins for conflicts,
 // and anything tombstoned in either version's deletedIds is removed from both.
 function mergeProjectData(local, remote) {
+  const localStamp = Number(local?.updatedAt || local?.updated_at || 0);
+  const remoteStamp = Number(remote?.updatedAt || remote?.updated_at || remote?.__remoteUpdatedAt || 0);
+  const projectPrefersLocal = localStamp >= remoteStamp;
+
   function getStamp(item) {
     if (!item) return 0;
     const vals = [item.updatedAt, item.updated_at, item.__remoteUpdatedAt, item._remoteUpdatedAt];
@@ -216,7 +220,11 @@ function mergeProjectData(local, remote) {
           const b = rv[i];
           if (a === undefined || a === null || a === '') return b ?? a;
           if (b === undefined || b === null || b === '') return a;
-          if (a !== b) return a || b;
+          if (a !== b) {
+            const aFilled = String(a ?? '').trim().length;
+            const bFilled = String(b ?? '').trim().length;
+            return bFilled > aFilled ? b : a;
+          }
           return a;
         });
         result[key] = merged;
@@ -247,9 +255,9 @@ function mergeProjectData(local, remote) {
       if (!localItem && remoteItem) { merged.push(remoteItem); continue; }
       if (!remoteItem) continue;
 
+      const idx = merged.findIndex(item => item && item.id === id);
       const localStamp = getStamp(localItem);
       const remoteStamp = getStamp(remoteItem);
-      const idx = merged.findIndex(item => item && item.id === id);
 
       if (remoteStamp > localStamp) {
         if (idx >= 0) merged[idx] = remoteItem;
@@ -257,7 +265,11 @@ function mergeProjectData(local, remote) {
       } else if (remoteStamp < localStamp) {
         // keep local value as the newer one
       } else if (idx >= 0) {
-        merged[idx] = mergeItemValues(localItem, remoteItem);
+        if (projectPrefersLocal && localItem) {
+          merged[idx] = { ...localItem, ...mergeItemValues(localItem, remoteItem) };
+        } else {
+          merged[idx] = mergeItemValues(localItem, remoteItem);
+        }
       }
     }
 
