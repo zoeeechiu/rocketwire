@@ -106,7 +106,7 @@ function save() {
 // last time it was pulled or pushed (ST.syncedHashes). Panning/zooming and
 // other non-data actions never count.
 
-const RW_SYNC_BUILD = 'sync-2026-09-19c';
+const RW_SYNC_BUILD = 'sync-2026-09-19d';
 console.log('[RocketWire] storage.js loaded, build', RW_SYNC_BUILD);
 
 const HASH_SKIP = new Set(['updatedAt','updated_at','_fp','_edge','__remoteUpdatedAt','_remoteUpdatedAt']);
@@ -408,6 +408,8 @@ function goPage(id) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   currentPage = id;
+  const syncBtnEl = document.getElementById('sync-btn');
+  if (syncBtnEl) syncBtnEl.style.display = (id === 'pg-canvas') ? '' : 'none';
   // Always persist current page immediately so refresh knows where to return
   try { localStorage.setItem('rw3_page', id); } catch(e) {}
   buildBC(id);
@@ -557,3 +559,29 @@ function hideCtx() { document.getElementById('ctx').style.display = 'none'; }
 document.addEventListener('click', e => { if (!document.getElementById('ctx').contains(e.target)) hideCtx(); });
 
 // ═══════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════
+// TOP-BAR SYNC BUTTON (next to Push, project/canvas page only)
+// ═══════════════════════════════════════════════════════
+// Created here so index.html doesn't need to change. It lives inside
+// #push-wrap, so it is only available while logged in, exactly like Push.
+async function syncFromTopbar() {
+  const btn = document.getElementById('sync-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Syncing…'; }
+  try { await loadFromCloud(); }
+  finally { if (btn) { btn.disabled = false; btn.textContent = '↻ Sync'; } }
+}
+function addTopbarSyncButton() {
+  const wrap = document.getElementById('push-wrap');
+  if (!wrap || document.getElementById('sync-btn')) return;
+  const b = document.createElement('button');
+  b.id = 'sync-btn';
+  b.className = 'btn btn-ol btn-sm';
+  b.textContent = '↻ Sync';
+  b.title = 'Pull the latest pushed version from the cloud';
+  b.style.cssText = 'margin-right:6px;min-width:72px;display:' + (currentPage === 'pg-canvas' ? '' : 'none');
+  b.onclick = syncFromTopbar;
+  wrap.insertBefore(b, wrap.firstChild);
+}
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', addTopbarSyncButton);
+else addTopbarSyncButton();
