@@ -47,8 +47,8 @@ async function boot() {
     sbUser = session.user;
     ST.isLoggedIn = true;
     applyLogin();
-    await loadFromCloud(); // load cloud projects
-    startPolling(); // keep in sync
+    // Keep the app stable: do not auto-pull remote state on every login.
+    // Users explicitly push their final changes and can use Sync manually.
   } else if (ST.isLoggedIn) {
     applyLogin();
   }

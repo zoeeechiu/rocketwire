@@ -154,7 +154,9 @@ async function pushChanges() {
       const { error } = await sb.from('projects').upsert(payload);
       if (error) throw error;
 
-      await loadFromCloud();
+      // Do not reload from cloud immediately after a push. This app is meant
+      // to use a final local authoring pass followed by a manual push, rather
+      // than continually pulling remote state and overwriting the current edit.
       break;
     }
 
@@ -355,13 +357,12 @@ async function loadFromCloud() {
 // Poll for changes every 30 seconds when logged in
 let _pollTimer = null;
 function startPolling() {
-  if (_pollTimer) return;
-  _pollTimer = setInterval(async () => {
-    if (sbUser) await loadFromCloud();
-  }, 20000);
+  // Disabled by design: use explicit Push / Sync actions instead of
+  // automatically pulling remote state mid-edit.
+  return;
 }
 function stopPolling() {
-  if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+  return;
 }
 
 function load() {
@@ -450,8 +451,6 @@ async function doLogin() {
     sbUser = data.user;
     ST.isLoggedIn = true; save(); applyLogin();
     closeM('m-login'); notify('Logged in', 'ok');
-    loadFromCloud();
-    startPolling();
     if (authCb) { authCb(); authCb = null; }
     return;
   }
