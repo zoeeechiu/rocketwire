@@ -2,6 +2,30 @@
 // STORAGE — Supabase cloud + localStorage fallback
 // ═══════════════════════════════════════════════════════
 
+function touchUpdated(obj) {
+  if (!obj) return;
+  const now = Date.now();
+  obj.updatedAt = Math.max(Number(obj.updatedAt) || 0, now);
+  obj.updated_at = obj.updatedAt;
+}
+
+function touchProjectTree(node) {
+  if (!node) return;
+  touchUpdated(node);
+  (node.systems || []).forEach(sys => {
+    touchProjectTree(sys);
+  });
+  (node.connectors || []).forEach(conn => {
+    touchUpdated(conn);
+  });
+  (node.wires || []).forEach(wire => {
+    touchUpdated(wire);
+  });
+  (node.splices || []).forEach(splice => {
+    touchUpdated(splice);
+  });
+}
+
 // Save current project locally only. The final publish step is explicit via
 // the top-right Push button, so local edits are not silently overwritten by
 // an automatic cloud merge while the user is still authoring.
@@ -32,7 +56,7 @@ function save() {
   }
 
   ST.projects.forEach(proj => {
-    if (proj) proj.updatedAt = Date.now();
+    if (proj) touchProjectTree(proj);
   });
 
   try {
