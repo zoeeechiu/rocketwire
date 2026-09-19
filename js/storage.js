@@ -2,11 +2,10 @@
 // STORAGE — Supabase cloud + localStorage fallback
 // ═══════════════════════════════════════════════════════
 
-// Save current project to Supabase (debounced)
-let _saveTimer = null;
+// Save current project locally only. The final publish step is explicit via
+// the top-right Push button, so local edits are not silently overwritten by
+// an automatic cloud merge while the user is still authoring.
 function save() {
-  // Sync navStack data back into ST.projects before saving
-  // (ensures wire drag positions, box positions etc are captured)
   if (activeProjId) {
     const proj = ST.projects.find(p => p.id === activeProjId);
     if (proj && navStack.length > 0) {
@@ -22,7 +21,6 @@ function save() {
     if (proj) proj.updatedAt = Date.now();
   });
 
-  // Always keep localStorage in sync
   try {
     localStorage.setItem('rw3', JSON.stringify(ST));
     if (activeProjId) localStorage.setItem('rw3_proj', activeProjId);
@@ -31,10 +29,6 @@ function save() {
       navStack.map(sc => ({label:sc.label, sysId:sc.sysId||null}))
     ));
   } catch(e) {}
-
-  // Debounce cloud saves — 800ms is fast enough without hammering API
-  if (_saveTimer) clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(saveToCloud, 800);
 }
 
 // Attempt sync on page unload (best-effort)
@@ -69,7 +63,6 @@ async function saveToCloud() {
   if (!sbUser || !ST.projects.length) return;
   try {
     for (const proj of ST.projects) {
-      // Fetch current cloud version before saving to detect conflicts
       const { data: existing } = await sb.from('projects')
         .select('data, updated_at')
         .eq('id', proj.id)
@@ -78,21 +71,13 @@ async function saveToCloud() {
       let dataToSave = proj;
 
       if (existing && existing.data) {
-        const remoteData = { ...existing.data, __remoteUpdatedAt: new Date(existing.updated_at || Date.now()).getTime() };
-        // Merge: combine connectors, systems, wires by ID from both versions
-        // so simultaneous edits from two users don't overwrite each other
-        dataToSave = mergeProjectData(proj, remoteData);
-        // Also update our local copy with the merge result
+        // On manual publish, merge the current local project with the latest
+        // remote row, but do not keep reloading the cloud while the user is
+        // still making edits. This preserves the final local draft as the main
+        // source of truth for the push.
+        dataToSave = mergeProjectData(proj, { ...existing.data, __remoteUpdatedAt: new Date(existing.updated_at || Date.now()).getTime() });
         const idx = ST.projects.findIndex(p => p.id === proj.id);
         if (idx >= 0) ST.projects[idx] = dataToSave;
-        // Hot-reload canvas if open
-        if (activeProjId === proj.id && currentPage === 'pg-canvas' && navStack.length > 0) {
-          navStack[0].systems    = dataToSave.systems;
-          navStack[0].connectors = dataToSave.connectors;
-          navStack[0].wires      = dataToSave.wires;
-          navStack[0].splices    = dataToSave.splices || [];
-          redraw();
-        }
       }
 
       await sb.from('projects').upsert({
@@ -153,10 +138,6 @@ async function pushChanges() {
 
       const { error } = await sb.from('projects').upsert(payload);
       if (error) throw error;
-
-      // Do not reload from cloud immediately after a push. This app is meant
-      // to use a final local authoring pass followed by a manual push, rather
-      // than continually pulling remote state and overwriting the current edit.
       break;
     }
 
