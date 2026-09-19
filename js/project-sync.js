@@ -17,6 +17,35 @@
     node.systems.forEach(sys => pruneDeletedTree(sys, delSet));
   }
 
+  function getStamp(item) {
+    if (!item) return 0;
+    const vals = [item.updatedAt, item.updated_at, item.__remoteUpdatedAt, item._remoteUpdatedAt];
+    const nums = vals.filter(v => v !== undefined && v !== null && !Number.isNaN(Number(v))).map(v => Number(v));
+    return nums.length ? Math.max(...nums) : 0;
+  }
+
+  function mergeItemValues(localItem, remoteItem) {
+    const result = { ...localItem, ...remoteItem };
+    for (const key of new Set([...Object.keys(localItem || {}), ...Object.keys(remoteItem || {})])) {
+      const lv = localItem?.[key];
+      const rv = remoteItem?.[key];
+      if (Array.isArray(lv) && Array.isArray(rv)) {
+        const merged = Array.from({ length: Math.max(lv.length, rv.length) }, (_, i) => {
+          const a = lv[i];
+          const b = rv[i];
+          if (a === undefined || a === null || a === '') return b ?? a;
+          if (b === undefined || b === null || b === '') return a;
+          if (a !== b) return a || b;
+          return a;
+        });
+        result[key] = merged;
+      } else if (lv && rv && typeof lv === 'object' && !Array.isArray(lv) && typeof rv === 'object' && !Array.isArray(rv)) {
+        result[key] = mergeItemValues(lv, rv);
+      }
+    }
+    return result;
+  }
+
   function mergeProjectData(local, remote) {
     if (!local) return remote || null;
     if (!remote) return local;
@@ -29,8 +58,34 @@
     const mergedDeletedIds = [...delMap.values()];
     const delSet = new Set(mergedDeletedIds.map(d => d.id));
 
+    function mergeById(localArr, remoteArr) {
+      const merged = [...(localArr || [])];
+      const localMap = new Map((localArr || []).map(x => [x.id, x]));
+      const remoteMap = new Map((remoteArr || []).map(x => [x.id, x]));
+      const allIds = new Set([...localMap.keys(), ...remoteMap.keys()]);
+      for (const id of allIds) {
+        const localItem = localMap.get(id);
+        const remoteItem = remoteMap.get(id);
+        if (!localItem && remoteItem) { merged.push(remoteItem); continue; }
+        if (!remoteItem) continue;
+        const idx = merged.findIndex(item => item && item.id === id);
+        const localStamp = getStamp(localItem);
+        const remoteStamp = getStamp(remoteItem);
+        if (remoteStamp > localStamp) {
+          if (idx >= 0) merged[idx] = remoteItem;
+          else merged.push(remoteItem);
+        } else if (remoteStamp < localStamp) {
+          continue;
+        } else if (idx >= 0) {
+          merged[idx] = mergeItemValues(localItem, remoteItem);
+        }
+      }
+      return merged;
+    }
+
     const result = {
       ...local,
+      ...remote,
       systems: mergeById(local.systems, remote.systems),
       connectors: mergeById(local.connectors, remote.connectors),
       wires: mergeById(local.wires, remote.wires),

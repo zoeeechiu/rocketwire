@@ -18,6 +18,10 @@ function save() {
     }
   }
 
+  ST.projects.forEach(proj => {
+    if (proj) proj.updatedAt = Date.now();
+  });
+
   // Always keep localStorage in sync
   try {
     localStorage.setItem('rw3', JSON.stringify(ST));
@@ -74,9 +78,10 @@ async function saveToCloud() {
       let dataToSave = proj;
 
       if (existing && existing.data) {
+        const remoteData = { ...existing.data, __remoteUpdatedAt: new Date(existing.updated_at || Date.now()).getTime() };
         // Merge: combine connectors, systems, wires by ID from both versions
         // so simultaneous edits from two users don't overwrite each other
-        dataToSave = mergeProjectData(proj, existing.data);
+        dataToSave = mergeProjectData(proj, remoteData);
         // Also update our local copy with the merge result
         const idx = ST.projects.findIndex(p => p.id === proj.id);
         if (idx >= 0) ST.projects[idx] = dataToSave;
@@ -191,6 +196,35 @@ function pruneDeletedTree(node, delSet) {
 // Merge two versions of a project — combine arrays by ID, local wins for conflicts,
 // and anything tombstoned in either version's deletedIds is removed from both.
 function mergeProjectData(local, remote) {
+  function getStamp(item) {
+    if (!item) return 0;
+    const vals = [item.updatedAt, item.updated_at, item.__remoteUpdatedAt, item._remoteUpdatedAt];
+    const nums = vals.filter(v => v !== undefined && v !== null && !Number.isNaN(Number(v))).map(v => Number(v));
+    return nums.length ? Math.max(...nums) : 0;
+  }
+
+  function mergeItemValues(localItem, remoteItem) {
+    const result = { ...localItem, ...remoteItem };
+    for (const key of new Set([...Object.keys(localItem || {}), ...Object.keys(remoteItem || {})])) {
+      const lv = localItem?.[key];
+      const rv = remoteItem?.[key];
+      if (Array.isArray(lv) && Array.isArray(rv)) {
+        const merged = Array.from({ length: Math.max(lv.length, rv.length) }, (_, i) => {
+          const a = lv[i];
+          const b = rv[i];
+          if (a === undefined || a === null || a === '') return b ?? a;
+          if (b === undefined || b === null || b === '') return a;
+          if (a !== b) return a || b;
+          return a;
+        });
+        result[key] = merged;
+      } else if (lv && rv && typeof lv === 'object' && !Array.isArray(lv) && typeof rv === 'object' && !Array.isArray(rv)) {
+        result[key] = mergeItemValues(lv, rv);
+      }
+    }
+    return result;
+  }
+
   function mergeById(localArr, remoteArr) {
     // Local order is the base — not just local content. Connector layout
     // (which side of a box, and where along that edge) is driven entirely
@@ -201,10 +235,30 @@ function mergeProjectData(local, remote) {
     // "merged" correctly. Anything remote has that local doesn't (e.g.
     // added from another device) still gets appended at the end.
     const merged = [...(localArr || [])];
-    const localIds = new Set(merged.map(x => x.id));
-    for (const remoteItem of (remoteArr || [])) {
-      if (!localIds.has(remoteItem.id)) merged.push(remoteItem);
+    const localMap = new Map((localArr || []).map(x => [x.id, x]));
+    const remoteMap = new Map((remoteArr || []).map(x => [x.id, x]));
+    const allIds = new Set([...localMap.keys(), ...remoteMap.keys()]);
+
+    for (const id of allIds) {
+      const localItem = localMap.get(id);
+      const remoteItem = remoteMap.get(id);
+      if (!localItem && remoteItem) { merged.push(remoteItem); continue; }
+      if (!remoteItem) continue;
+
+      const localStamp = getStamp(localItem);
+      const remoteStamp = getStamp(remoteItem);
+      const idx = merged.findIndex(item => item && item.id === id);
+
+      if (remoteStamp > localStamp) {
+        if (idx >= 0) merged[idx] = remoteItem;
+        else merged.push(remoteItem);
+      } else if (remoteStamp < localStamp) {
+        // keep local value as the newer one
+      } else if (idx >= 0) {
+        merged[idx] = mergeItemValues(localItem, remoteItem);
+      }
     }
+
     return merged;
   }
 
@@ -219,6 +273,7 @@ function mergeProjectData(local, remote) {
 
   const result = {
     ...local,
+    ...remote,
     systems:    mergeById(local.systems,    remote.systems),
     connectors: mergeById(local.connectors, remote.connectors),
     wires:      mergeById(local.wires,      remote.wires),
@@ -243,7 +298,10 @@ async function loadFromCloud() {
     // same logic as saveToCloud already uses) means an in-flight local edit
     // is never silently dropped, while genuinely remote changes (e.g. from
     // another device) still come through.
-    const cloudProjects = data.map(row => row.data);
+    const cloudProjects = data.map(row => ({
+      ...row.data,
+      __remoteUpdatedAt: new Date(row.updated_at).getTime()
+    }));
     const localById = new Map(ST.projects.map(p => [p.id, p]));
     const merged = [];
     const seen = new Set();
