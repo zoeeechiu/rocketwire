@@ -9,6 +9,20 @@ function save() {
   if (activeProjId) {
     const proj = ST.projects.find(p => p.id === activeProjId);
     if (proj && navStack.length > 0) {
+      // Persist the live scope back into its parent object, then mirror the
+      // root project arrays. The app can be inside a subsystem view, and the
+      // previous implementation only saved navStack[0], which left the live
+      // current scope stale and let older project data overwrite newer edits.
+      for (let i = navStack.length - 1; i >= 0; i--) {
+        const scopeEntry = navStack[i];
+        if (scopeEntry.parentSys && scopeEntry.parentScope) {
+          scopeEntry.parentSys.systems    = scopeEntry.systems || [];
+          scopeEntry.parentSys.connectors = scopeEntry.connectors || [];
+          scopeEntry.parentSys.wires      = scopeEntry.wires || [];
+          scopeEntry.parentSys.splices    = scopeEntry.splices || [];
+        }
+      }
+
       const root = navStack[0];
       proj.systems    = root.systems;
       proj.connectors = root.connectors;
