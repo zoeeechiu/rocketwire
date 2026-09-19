@@ -65,3 +65,31 @@ test('mergeProjectData preserves local edits when ids match', () => {
   const merged = mergeProjectData(local, remote);
   assert.equal(merged.systems[0].name, 'Local changed');
 });
+
+test('mergeProjectData keeps the newest connector type and pin count when timestamps match', () => {
+  const local = {
+    id: 'p3',
+    name: 'Local',
+    systems: [],
+    connectors: [{ id: 'c1', systemId: 's1', type: 'DSUB-15', pins: 15, channels: ['A', 'B', 'C'], colors: ['red', 'black', 'blue'], updatedAt: 100 }],
+    wires: [],
+    splices: [],
+    deletedIds: [],
+    updatedAt: 100
+  };
+
+  const remote = {
+    id: 'p3',
+    name: 'Remote',
+    systems: [],
+    connectors: [{ id: 'c1', systemId: 's1', type: 'Amphenol 9-35', pins: 6, channels: ['GND', 'PWR'], colors: ['black', 'red'], updatedAt: 100 }],
+    wires: [],
+    splices: [],
+    deletedIds: [],
+    updatedAt: 100
+  };
+
+  const merged = mergeProjectData(local, remote);
+  assert.equal(merged.connectors[0].type, 'DSUB-15');
+  assert.equal(merged.connectors[0].pins, 15);
+});

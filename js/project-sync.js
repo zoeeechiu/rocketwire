@@ -36,9 +36,10 @@
           if (a === undefined || a === null || a === '') return b ?? a;
           if (b === undefined || b === null || b === '') return a;
           if (a !== b) {
-            const aFilled = String(a ?? '').trim().length;
-            const bFilled = String(b ?? '').trim().length;
-            return bFilled > aFilled ? b : a;
+            const localStamp = getStamp(localItem);
+            const remoteStamp = getStamp(remoteItem);
+            if (remoteStamp > localStamp) return b;
+            return a;
           }
           return a;
         });
