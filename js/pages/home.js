@@ -42,6 +42,7 @@ function showProjMenu(x,y,id){
   showCtx(x,y,[
     {label:'Open',icon:'📂',fn:()=>openProj(id)},
     {label:'Rename',icon:'✏️',fn:()=>reqAuth(()=>{renameProjId=id;document.getElementById('rp-name').value=p.name;openM('m-rename');})},
+    {label:'Copy',icon:'📄',fn:()=>reqAuth(()=>openCopyProj(id))},
     {divider:true},
     {label:'Delete project',icon:'🗑',danger:true,fn:()=>reqAuth(async()=>{
       if(!confirm(`Delete "${p.name}"?`))return;
@@ -61,6 +62,66 @@ function doRename(){
   const p=ST.projects.find(x=>x.id===renameProjId);
   if(p){p.name=n;save();renderHome();buildBC(currentPage);}
   closeM('m-rename');notify('Renamed','ok');
+}
+
+// ─── COPY PROJECT ──────────────────────────────────────
+let copyProjId=null;
+
+// "Copy of X", or "Copy of X (2)", "(3)"… if that name is already taken.
+function uniqueCopyName(name){
+  const taken=new Set(ST.projects.map(p=>p.name));
+  const base=`Copy of ${name}`;
+  if(!taken.has(base))return base;
+  let i=2;while(taken.has(`${base} (${i})`))i++;
+  return `${base} (${i})`;
+}
+
+function openCopyProj(id){
+  const p=ST.projects.find(x=>x.id===id);if(!p)return;
+  copyProjId=id;
+  const nameEl=document.getElementById('cp-name');
+  nameEl.value=uniqueCopyName(p.name);
+  document.getElementById('cp-desc').value=p.desc||'';
+  document.getElementById('cp-sub').textContent=`Duplicate everything in "${p.name}" into a new project.`;
+  openM('m-copyproj');
+  // Focus + select so the user can type a new name straight away
+  // (focusing also clears the readonly anti-autofill attribute).
+  setTimeout(()=>{nameEl.focus();nameEl.select();},0);
+}
+
+async function doCopyProj(){
+  if(!ST.isLoggedIn){reqAuth(doCopyProj);return;}
+  const src=ST.projects.find(x=>x.id===copyProjId);
+  if(!src){closeM('m-copyproj');notify('Original project not found','err');return;}
+  const name=document.getElementById('cp-name').value.trim();
+  if(!name){notify('Enter a project name','err');return;}
+
+  // Deep clone so the copy shares no object references with the original —
+  // editing one must never mutate the other.
+  const clone=JSON.parse(JSON.stringify(src));
+
+  // Drop anything the original had tombstoned, then start the copy with a
+  // clean deletion history (it's a brand-new project).
+  const delSet=new Set((clone.deletedIds||[]).map(d=>d.id));
+  if(delSet.size)pruneDeletedTree(clone,delSet);
+  clone.deletedIds=[];
+  delete clone.__remoteUpdatedAt;
+
+  // New project identity. Inner system/connector/wire/splice ids are kept
+  // as-is: they are only referenced within the same project, so keeping
+  // them preserves every wire→connector and splice link without remapping.
+  clone.id='p'+Date.now();
+  clone.name=name;
+  clone.desc=document.getElementById('cp-desc').value.trim();
+  touchProjectTree(clone);
+
+  ST.projects.push(clone);
+  try{localStorage.setItem('rw3',JSON.stringify(ST));}catch(e){}
+  closeM('m-copyproj');
+  copyProjId=null;
+  renderHome();
+  await saveToCloud();
+  notify('Project copied','ok');
 }
 
 // ═══════════════════════════════════════════════════════

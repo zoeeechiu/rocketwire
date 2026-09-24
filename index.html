@@ -202,6 +202,13 @@
     <div class="mbtns"><button class="btn btn-gh" onclick="closeM('m-rename')">Cancel</button><button class="btn btn-red" onclick="doRename()">Rename</button></div>
   </div>
 </div>
+<div class="mbg" id="m-copyproj" style="display:none">
+  <div class="modal"><h2>Copy project</h2><div class="msub" id="cp-sub">Duplicate this project.</div>
+    <div class="mf"><label>Project name</label><input id="cp-name" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" placeholder="e.g. 2026 Launch Vehicle" onkeydown="if(event.key==='Enter')doCopyProj()"></div>
+    <div class="mf"><label>Description (optional)</label><input id="cp-desc" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" placeholder="Short description" onkeydown="if(event.key==='Enter')doCopyProj()"></div>
+    <div class="mbtns"><button class="btn btn-gh" onclick="closeM('m-copyproj')">Cancel</button><button class="btn btn-red" onclick="doCopyProj()">Copy</button></div>
+  </div>
+</div>
 
 <!-- SPLICE PAGE -->
 <div class="page" id="pg-splice" style="flex-direction:row">
@@ -265,19 +272,19 @@
 <div id="ctx"></div>
 <div id="notif"></div>
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-  <script src="js/supabase.js?v=20260919"></script>
-  <script src="js/constants.js?v=20260919"></script>
-  <script src="js/state.js?v=20260919"></script>
-  <script src="js/project-sync.js?v=20260919"></script>
-  <script src="js/storage.js?v=20260919"></script>
-  <script src="js/pages/home.js?v=20260919"></script>
-  <script src="js/canvas/routing.js?v=20260919"></script>
-  <script src="js/canvas/draw.js?v=20260919"></script>
-  <script src="js/canvas/events.js?v=20260919"></script>
-  <script src="js/splice.js?v=20260919"></script>
-  <script src="js/panels.js?v=20260919"></script>
-  <script src="js/pages/connector.js?v=20260919"></script>
-  <script src="js/pages/add-system.js?v=20260919"></script>
-  <script src="js/export.js?v=20260919"></script>
+  <script src="js/supabase.js?v=1783795784"></script>
+  <script src="js/constants.js?v=1783795784"></script>
+  <script src="js/state.js?v=1783795784"></script>
+  <script src="js/project-sync.js?v=1783795784"></script>
+  <script src="js/storage.js?v=1783795784"></script>
+  <script src="js/pages/home.js?v=1783795784"></script>
+  <script src="js/canvas/routing.js?v=1783795784"></script>
+  <script src="js/canvas/draw.js?v=1783795784"></script>
+  <script src="js/canvas/events.js?v=1783795784"></script>
+  <script src="js/splice.js?v=1783795784"></script>
+  <script src="js/panels.js?v=1783795784"></script>
+  <script src="js/pages/connector.js?v=1783795784"></script>
+  <script src="js/pages/add-system.js?v=1783795784"></script>
+  <script src="js/export.js?v=1783795784"></script>
 </body>
 </html>
