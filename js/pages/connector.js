@@ -363,6 +363,7 @@ function onCcSys(){
   const avail=sc.connectors.filter(c=>c.systemId===sysId&&c.id!==conn.id&&(wireCount[c.id]||0)<1);
   connSel.innerHTML=avail.map(c=>`<option value="${c.id}">#${c.num} ${connTypeLabel(c)}</option>`).join('')||'<option value="">None available</option>';
 }
+// Replace the existing connectToExisting() in js/pages/connector.js with this.
 function connectToExisting(){
   if(!ST.isLoggedIn){reqAuth(connectToExisting);return;}
   const sc=scope();
@@ -375,19 +376,41 @@ function connectToExisting(){
   if(existing){if(msg){msg.textContent='This connector already has a wire. Delete it first.';msg.style.display='block';}return;}
   const other=sc.connectors.find(c=>c.id===connSel.value);
   sc.wires.push({id:'w'+Date.now(),fromConn:conn.id,toConn:connSel.value,length:null});
-  // Auto-populate this connector's channel names + colors to match the one it's connecting to
-  if(other&&other.channels){
-    if(!conn.channels)conn.channels=[];
-    if(!conn.colors)conn.colors=[];
-    for(let i=0;i<other.channels.length&&i<conn.pins;i++){
-      if(other.channels[i]){
-        conn.channels[i]=other.channels[i];
-        conn.colors[i]=other.colors?.[i]||'red';
-      }
+
+  if(other){
+    // 1) Match the mating connector's type + pin layout FIRST. Previously the
+    //    channel copy below was capped at this connector's current pin count
+    //    (usually the 6-pin default), so connecting to e.g. a 13-pin or
+    //    DSUB-37 silently dropped every channel past pin 6.
+    //    Splice connectors are skipped: their pins are mapped to stem
+    //    channels (channelMap), and changing their pin count here would
+    //    break that mapping. Edit those from "Edit splice" instead.
+    if(!conn.isSplice){
+      conn.type=other.type;
+      conn.customName=other.customName||'';
+      conn.pins=other.pins;
+      if(other.cols)conn.cols=other.cols; else delete conn.cols;
+      if(other.rows)conn.rows=other.rows; else delete conn.rows;
+      // Mated pair = opposite genders (same rule as Add System → existing)
+      if(other.gender)conn.gender=other.gender==='male'?'female':'male';
     }
+    // 2) Copy channel names + wire colors pin-for-pin across the full
+    //    (matched) pin count.
+    //    - Colors: ALWAYS taken from the other side. Pin i here and pin i
+    //      there are the same physical wire, so they must be the same color,
+    //      even on a pin that has no channel name yet.
+    //    - Names: taken from the other side; if that pin is blank there,
+    //      keep whatever name this connector already had.
+    const n=conn.pins;
+    const oldCh=conn.channels||[], oldCol=conn.colors||[];
+    conn.channels=Array.from({length:n},(_,i)=>other.channels?.[i]||oldCh[i]||'');
+    conn.colors=Array.from({length:n},(_,i)=>other.colors?.[i]||oldCol[i]||'red');
   }
   save();
   if(msg){msg.textContent='Connected!';msg.style.color='#0d7a5f';msg.style.display='block';}
+  // Rebuilds the draft from the updated connector, so the type dropdown,
+  // pin count, SVG and channel table all show the matched values. The user
+  // can still change the type afterwards and hit Save.
   renderConnPage();notify('Connected','ok');
   setTimeout(()=>{if(msg)msg.style.display='none';},2000);
 }
