@@ -42,6 +42,10 @@ function renderHomePath(){
 }
 
 function renderHome(filter=''){
+  // Pick up any folder changes a pull just brought in. Cheap (it no-ops if
+  // nothing changed), and it also covers a pull that ran before folders.js
+  // finished loading.
+  ingestFolderIndex();
   if(currentFolderId&&!folderById(currentFolderId))currentFolderId=null;
   renderHomePath();
   const grid=document.getElementById('pgrid');grid.innerHTML='';

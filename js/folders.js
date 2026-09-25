@@ -15,10 +15,9 @@
 // Cloud sync
 //   Projects sync as rows in the Supabase `projects` table. Folders ride in
 //   the SAME table as one reserved row per user (id "rw_folders_<userId>"),
-//   so there's no new table, SQL or RLS policy to set up. Pull (Sync) and
-//   Push both fetch every row for the user, so that row comes along
-//   automatically. absorbFolderIndex() then lifts it out of ST.projects into
-//   ST.folders before anything renders it as a project.
+//   so there's no new table, SQL or RLS policy to set up. That row is kept in
+//   ST.projects as a hidden "project", so storage.js syncs it like any other
+//   project. See "Cloud sync" below.
 //
 // Load order: after storage.js, undo.js and home.js; BEFORE export.js
 // (boot() runs there and calls load() / renderHome()).
@@ -134,41 +133,96 @@ function mergeFoldersInto(remoteFolders, remoteDeleted) {
   ST.deletedFolderIds = [...del.values()];
 }
 
-// Pull the reserved folder row(s) out of ST.projects into ST.folders.
-function absorbFolderIndex() {
-  const rows = ST.projects.filter(isFolderIndexRow);
-  if (rows.length) {
-    ST.projects = ST.projects.filter(p => !isFolderIndexRow(p));
-    rows.forEach(r => mergeFoldersInto(r.folders, r.deletedFolderIds));
-  }
-  sanitizeFolders();
-  persistHome();
-  return rows.length > 0;
+// ── Cloud sync, via storage.js's own sync engine ────────
+// The folder tree is stored as a hidden "project" in ST.projects (id
+// rw_folders_<userId>, isFolderIndex: true), so Push / Sync / auto-pull on
+// login handle it EXACTLY like a real project: same hashing, same "changed
+// on this device?" check, same conflict rules. It's never shown as a card
+// (realProjects() filters it out).
+//
+// ST.folders is the working copy the UI edits. The hidden row is its synced
+// snapshot:
+//   • after any pull  → ingestFolderIndex() merges the row INTO ST.folders
+//                        (per folder, newest edit wins; deletes stick)
+//   • right before a Push from the home page → stageFolderIndex() writes
+//                        ST.folders INTO the row, so it counts as changed and
+//                        gets pushed with the projects.
+// Between pushes the row stays untouched ("clean"), so a pull can always
+// refresh it from the cloud without a conflict prompt, and unpushed local
+// folder edits survive because the merge keeps whichever edit is newer.
+
+function folderIndexId() { return sbUser ? FOLDER_ROW_PREFIX + sbUser.id : null; }
+function folderIndexRow() {
+  const id = folderIndexId();
+  return id ? ST.projects.find(p => p.id === id) || null : null;
 }
 
-async function pushFolderIndex() {
+let _lastIngestKey = null;
+function ingestFolderIndex() {
+  let changed = false;
+  if (sbUser) {
+    // Folders on this device belong to a DIFFERENT account (someone else
+    // logged in here before): don't mix them into this account's tree.
+    if (ST.foldersOwner && ST.foldersOwner !== sbUser.id) {
+      ST.folders = []; ST.deletedFolderIds = []; currentFolderId = null;
+      changed = true;
+    }
+    if (ST.foldersOwner !== sbUser.id) { ST.foldersOwner = sbUser.id; changed = true; }
+    // Hidden rows from another account can't be pushed by this one (RLS),
+    // so drop them from this device instead of letting Push fail on them.
+    const mine = folderIndexId();
+    const stale = ST.projects.filter(p => isFolderIndexRow(p) && p.id !== mine);
+    if (stale.length) {
+      ST.projects = ST.projects.filter(p => !stale.includes(p));
+      const h = ST.syncedHashes || {};
+      stale.forEach(p => { delete h[p.id]; });
+      changed = true;
+    }
+  }
+  const row = folderIndexRow();
+  if (row) {
+    // Skip the merge when the row hasn't changed since the last ingest
+    // (renderHome calls this on every render).
+    const key = JSON.stringify([row.folders, row.deletedFolderIds]);
+    if (key !== _lastIngestKey) {
+      _lastIngestKey = key;
+      const before = JSON.stringify([ST.folders, ST.deletedFolderIds]);
+      mergeFoldersInto(row.folders, row.deletedFolderIds);
+      if (JSON.stringify([ST.folders, ST.deletedFolderIds]) !== before) changed = true;
+    }
+  }
+  sanitizeFolders();
+  if (changed) persistHome();
+  return changed;
+}
+
+// Copy ST.folders into the hidden row so the next Push uploads it. Creates
+// the row the first time this account has any folders.
+function stageFolderIndex() {
   if (!sbUser) return;
-  const id = FOLDER_ROW_PREFIX + sbUser.id;
-  const name = 'Folder index (refresh RocketWire to hide)';
-  // name + empty arrays: a teammate still running old cached code sees this
-  // row as a project card; this keeps it harmless if they click it.
-  const data = {
-    id, name, isFolderIndex: true,
-    folders: ST.folders, deletedFolderIds: ST.deletedFolderIds,
-    systems: [], connectors: [], wires: [], splices: [],
-    updatedAt: Date.now()
-  };
-  const { error } = await sb.from('projects').upsert({
-    id, user_id: sbUser.id, name, data, updated_at: new Date().toISOString()
-  });
-  if (error) throw error;
+  let row = folderIndexRow();
+  if (!row) {
+    if (!ST.folders.length && !ST.deletedFolderIds.length) return; // nothing to sync yet
+    const id = folderIndexId();
+    // name + empty arrays: a teammate still running old cached code sees this
+    // row as a project card; this keeps it harmless if they click it.
+    row = { id, name: 'Folder index (refresh RocketWire to hide)', isFolderIndex: true,
+            systems: [], connectors: [], wires: [], splices: [] };
+    ST.projects.push(row);
+  }
+  row.folders = JSON.parse(JSON.stringify(ST.folders));
+  row.deletedFolderIds = JSON.parse(JSON.stringify(ST.deletedFolderIds));
+  _lastIngestKey = JSON.stringify([row.folders, row.deletedFolderIds]);
+  persistHome();
 }
 
 function homeSearchValue() { return document.getElementById('home-search')?.value || ''; }
 
 // ── Hooks into storage.js (no edits to storage.js needed) ──
 // Same technique as undo.js: top-level function declarations are writable
-// globals, so every existing caller goes through these wrappers.
+// globals, so every existing caller (autoPull on login / tab focus, the
+// top-bar Sync / Sync all button, the old home Sync button, Push) goes
+// through these wrappers.
 
 // load(): also restore folders + the folder you were last viewing
 const _loadNoFolders = load;
@@ -178,47 +232,59 @@ load = function () {
     const d = JSON.parse(localStorage.getItem('rw3') || 'null');
     ST.folders = (d && d.folders) || [];
     ST.deletedFolderIds = (d && d.deletedFolderIds) || [];
+    ST.foldersOwner = (d && d.foldersOwner) || null;
     currentFolderId = localStorage.getItem('rw3_folder') || null;
   } catch (e) {}
-  absorbFolderIndex();
   return r;
 };
 
-// Sync (pull): merge the cloud folder tree in
-const _loadFromCloudNoFolders = loadFromCloud;
-loadFromCloud = async function () {
-  const r = await _loadFromCloudNoFolders.apply(this, arguments);
-  absorbFolderIndex();
-  if (currentPage === 'pg-home') renderHome(homeSearchValue());
-  return r;
-};
-
-// Push: after the projects are pushed (that fetch also pulled the latest
-// cloud folder row, absorbed below), publish the merged folder tree.
-const _pushChangesNoFolders = pushChanges;
-pushChanges = async function () {
-  const r = await _pushChangesNoFolders.apply(this, arguments);
+// Login (and page load with a saved session): switch the folder tree to THIS
+// account right away, then pull its latest pushed state. The automatic pull
+// that storage.js fires on sign-in is throttled to one per 3 s, so logging
+// out and straight into another account could skip it and leave the
+// previous account's view on screen. Calling pullFromCloud() directly here
+// avoids that. If a pull is already running, storage.js's busy flag makes
+// this one a no-op.
+const _applyLoginNoFolders = applyLogin;
+applyLogin = function () {
+  const r = _applyLoginNoFolders.apply(this, arguments);
   if (sbUser) {
-    absorbFolderIndex();
-    try { await pushFolderIndex(); }
-    catch (e) { console.warn('Folder push failed:', e); notify('Folders failed to push — try again', 'err'); }
+    ingestFolderIndex();
     if (currentPage === 'pg-home') renderHome(homeSearchValue());
+    setTimeout(() => pullFromCloud(), 0);
   }
   return r;
 };
 
-// mergeProjectData() builds its result as {...local, ...remote, …}, so for
-// top-level fields the REMOTE copy always wins. For folderId that would undo
-// a move the moment you pressed Push. Instead, take folderId from whichever
-// copy was edited more recently.
-const _mergeProjectDataNoFolders = mergeProjectData;
-mergeProjectData = function (local, remote) {
-  const r = _mergeProjectDataNoFolders.apply(this, arguments);
-  if (!local || !remote || !r) return r;
-  const ls = Number(local.updatedAt || local.updated_at || 0);
-  const rs = Number(remote.updatedAt || remote.updated_at || remote.__remoteUpdatedAt || 0);
-  const src = ls >= rs ? local : remote;
-  if (src.folderId) r.folderId = src.folderId; else delete r.folderId;
+// Every pull (login, page load, tab re-focus, Sync, Sync all) — this is the
+// entry point they all share. storage.js only re-renders the home page when
+// a PROJECT changed; re-render after every pull so folder changes show too.
+const _pullFromCloudNoFolders = pullFromCloud;
+pullFromCloud = async function () {
+  const r = await _pullFromCloudNoFolders.apply(this, arguments);
+  ingestFolderIndex();
+  if (currentPage === 'pg-home') renderHome(homeSearchValue());
+  return r;
+};
+
+// Push from the home page (Push all): first merge in whatever folder changes
+// other devices pushed since our last pull, so we never overwrite them, then
+// stage the result so storage.js pushes it along with changed projects. A
+// Push from a project page only uploads that one project, so folders are
+// left alone there.
+const _pushChangesNoFolders = pushChanges;
+pushChanges = async function (projId) {
+  const pushingAll = typeof projId !== 'string' && currentPage === 'pg-home';
+  if (sbUser && pushingAll) {
+    try {
+      const { data } = await sb.from('projects').select('data').eq('id', folderIndexId()).maybeSingle();
+      if (data && data.data) mergeFoldersInto(data.data.folders, data.data.deletedFolderIds);
+      sanitizeFolders();
+    } catch (e) { console.warn('[RocketWire] could not fetch cloud folders before push:', e); }
+    stageFolderIndex();
+  }
+  const r = await _pushChangesNoFolders.apply(this, arguments);
+  if (currentPage === 'pg-home') renderHome(homeSearchValue());
   return r;
 };
 

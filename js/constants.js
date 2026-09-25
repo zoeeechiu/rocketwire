@@ -2,6 +2,10 @@
 // CONSTANTS
 // ═══════════════════════════════════════════════════════
 const CREDS = {user:'rocketteam',pass:'launch2026'};
+// Email of a real Supabase user (Dashboard > Authentication > Users) that the
+// shared "rocketteam" login signs in as, so that login can push/sync. Use the
+// same password as CREDS.pass. Leave '' to keep rocketteam local-only.
+const TEAM_SUPABASE_EMAIL = '';
 const WC = ['red','black','yellow','blue','green','orange','gray','purple','white','brown','pink','cyan'];
 const WHX = {red:'#e74c3c',black:'#2c2c2c',yellow:'#f1c40f',blue:'#2980b9',green:'#27ae60',orange:'#e67e22',gray:'#95a5a6',purple:'#8e44ad',white:'#bdc3c7',brown:'#795548',pink:'#e91e63',cyan:'#00bcd4'};
 const AUTO_PINS = {'Amphenol 9-35':6,'Amphenol 13-pin':13,'Amphenol 9-98':3,'XT60':2,'XT30':2,'DSUB-9':9,'DSUB-15':15,'DSUB-37':37};

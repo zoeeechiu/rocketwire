@@ -66,16 +66,20 @@ async function purgeDemoProject(){
     try{localStorage.setItem('rw3',JSON.stringify(ST));}catch(e){}
     if(currentPage==='pg-home')renderHome(document.getElementById('home-search')?.value||'');
   }
-  // Delete the cloud row too; a no-op if it isn't there
-  if(sbUser){
+  // Delete the cloud row too: once per page load, and again whenever a pull
+  // brought it back (so there isn't a network call on every pull)
+  if(sbUser&&(had||!purgeDemoProject._cloudDone)){
+    purgeDemoProject._cloudDone=true;
     try{await sb.from('projects').delete().eq('id',DEMO_PROJECT_ID);}
     catch(e){console.warn('Demo cloud cleanup failed:',e);}
   }
 }
 
-const _loadFromCloudKeepDemo=loadFromCloud;
-loadFromCloud=async function(){
-  const r=await _loadFromCloudKeepDemo.apply(this,arguments);
+// pullFromCloud is the one function every pull goes through (login, page
+// load, tab re-focus, Sync, Sync all), so clean up after it.
+const _pullFromCloudKeepDemo=pullFromCloud;
+pullFromCloud=async function(){
+  const r=await _pullFromCloudKeepDemo.apply(this,arguments);
   await purgeDemoProject();
   return r;
 };
