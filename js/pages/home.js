@@ -1,19 +1,85 @@
 // PAGE 1: HOME
 // ═══════════════════════════════════════════════════════
-function renderHome(filter=''){
-  const grid=document.getElementById('pgrid');grid.innerHTML='';
-  ST.projects.filter(p=>p.name.toLowerCase().includes(filter.toLowerCase())).forEach(p=>{
-    const c=document.createElement('div');c.className='pcard';
-    c.innerHTML=`<div class="pfolder">📁</div><div class="pname">${p.name}</div><div class="pmeta">${p.desc||'No description'}</div>`;
-    c.onclick=()=>openProj(p.id);
-    const kb=document.createElement('button');kb.className='pkb';kb.textContent='⋮';
-    kb.onclick=e=>{e.stopPropagation();showProjMenu(e.clientX,e.clientY,p.id);};
-    c.appendChild(kb);grid.appendChild(c);
+// Folder helpers (folderById, childFolders, projectsIn, …) live in folders.js.
+
+// One card (project or folder). Built with textContent rather than
+// innerHTML, so a name containing "<" or "&" shows as typed.
+function homeCard({icon,iconCls,name,meta,onOpen,onMenu,extraCls}){
+  const c=document.createElement('div');c.className='pcard'+(extraCls?' '+extraCls:'');
+  const ic=document.createElement('div');ic.className='pfolder'+(iconCls?' '+iconCls:'');ic.textContent=icon;
+  const nm=document.createElement('div');nm.className='pname';nm.textContent=name;
+  const mt=document.createElement('div');mt.className='pmeta';mt.textContent=meta;
+  c.append(ic,nm,mt);
+  c.onclick=onOpen;
+  const kb=document.createElement('button');kb.className='pkb';kb.textContent='⋮';
+  kb.onclick=e=>{e.stopPropagation();onMenu(e.clientX,e.clientY);};
+  c.appendChild(kb);
+  return c;
+}
+function folderCardEl(f,meta){
+  return homeCard({icon:'📁',iconCls:'ficon',extraCls:'fcard',name:f.name,meta,
+    onOpen:()=>openFolder(f.id),onMenu:(x,y)=>showFolderMenu(x,y,f.id)});
+}
+function projectCardEl(p,meta){
+  return homeCard({icon:'🔌',name:p.name,meta,
+    onOpen:()=>openProj(p.id),onMenu:(x,y)=>showProjMenu(x,y,p.id)});
+}
+
+// "Projects › Avionics › 2026" above the grid; each ancestor is clickable
+function renderHomePath(){
+  const el=document.getElementById('home-path');if(!el)return;
+  el.innerHTML='';
+  const crumbs=[{id:null,name:'Projects'},...folderPath(currentFolderId)];
+  crumbs.forEach((c,i)=>{
+    if(i>0){const s=document.createElement('span');s.className='hp-sep';s.textContent='›';el.appendChild(s);}
+    const isCur=i===crumbs.length-1;
+    const b=document.createElement(isCur?'span':'button');
+    b.className='hp-crumb'+(isCur?' cur':'');
+    b.textContent=c.name;
+    if(!isCur)b.onclick=()=>openFolder(c.id);
+    el.appendChild(b);
   });
+}
+
+function renderHome(filter=''){
+  if(currentFolderId&&!folderById(currentFolderId))currentFolderId=null;
+  renderHomePath();
+  const grid=document.getElementById('pgrid');grid.innerHTML='';
+  const q=(filter||'').trim().toLowerCase();
+
+  if(q){
+    // Searching looks through EVERY folder, not just the current one, and
+    // shows where each match lives.
+    const fs=ST.folders.filter(f=>f.name.toLowerCase().includes(q))
+      .sort((a,b)=>a.name.localeCompare(b.name,undefined,{numeric:true}));
+    const ps=realProjects().filter(p=>p.name.toLowerCase().includes(q));
+    fs.forEach(f=>grid.appendChild(folderCardEl(f,'in '+folderPathLabel(folderParent(f)))));
+    ps.forEach(p=>grid.appendChild(projectCardEl(p,'in '+folderPathLabel(projFolderId(p)))));
+    if(!fs.length&&!ps.length){
+      const e=document.createElement('div');e.className='home-empty';
+      e.textContent=`No projects or folders match "${filter.trim()}".`;
+      grid.appendChild(e);
+    }
+    return;
+  }
+
+  // Folders first, then projects, then the "+ New project" card
+  childFolders(currentFolderId).forEach(f=>grid.appendChild(folderCardEl(f,folderCountLabel(f.id))));
+  projectsIn(currentFolderId).forEach(p=>grid.appendChild(projectCardEl(p,p.desc||'No description')));
   const add=document.createElement('div');add.className='addcard';
   add.innerHTML='<div style="font-size:24px">+</div><div>New project</div>';
-  add.onclick=()=>reqAuth(()=>openM('m-newproj'));
+  add.onclick=()=>openNewProj();
   grid.appendChild(add);
+}
+
+// New project modal: the folder picker defaults to the folder you're
+// currently viewing (Home when you're on the top-level page).
+function openNewProj(){
+  reqAuth(()=>{
+    fillFolderSelect(document.getElementById('np-folder'),currentFolderId);
+    openM('m-newproj');
+    setTimeout(()=>document.getElementById('np-name')?.focus(),0);
+  });
 }
 function openProj(id){
   activeProjId=id;wireChVis={};
@@ -27,11 +93,17 @@ async function createProj(){
   if(!name){notify('Enter a project name','err');return;}
   const p={id:'p'+Date.now(),name,desc:document.getElementById('np-desc').value.trim(),
     systems:[],connectors:[],wires:[],splices:[]};
+  // Folder picked in the modal; left on "Home" = no folderId = top level
+  const folderId=document.getElementById('np-folder')?.value||'';
+  if(folderId&&folderById(folderId))p.folderId=folderId;
   ST.projects.push(p);
+  // Show the folder the project was created in, so it's visible right away
+  currentFolderId=p.folderId||null;
   // Save locally first
-  try{localStorage.setItem('rw3',JSON.stringify(ST));}catch(e){}
+  try{localStorage.setItem('rw3',JSON.stringify(ST));localStorage.setItem('rw3_folder',currentFolderId||'');}catch(e){}
   closeM('m-newproj');
   document.getElementById('np-name').value='';document.getElementById('np-desc').value='';
+  const s=document.getElementById('home-search');if(s)s.value='';
   renderHome();
   // Then save to cloud immediately and wait for it
   await saveToCloud();
@@ -43,12 +115,13 @@ function showProjMenu(x,y,id){
     {label:'Open',icon:'📂',fn:()=>openProj(id)},
     {label:'Rename',icon:'✏️',fn:()=>reqAuth(()=>{renameProjId=id;document.getElementById('rp-name').value=p.name;openM('m-rename');})},
     {label:'Copy',icon:'📄',fn:()=>reqAuth(()=>openCopyProj(id))},
+    {label:'Move to…',icon:'➡️',fn:()=>reqAuth(()=>openMove('project',id))},
     {divider:true},
     {label:'Delete project',icon:'🗑',danger:true,fn:()=>reqAuth(async()=>{
       if(!confirm(`Delete "${p.name}"?`))return;
       ST.projects=ST.projects.filter(x=>x.id!==id);
       try{localStorage.setItem('rw3',JSON.stringify(ST));}catch(e){}
-      renderHome();notify('Deleted');
+      renderHome(homeSearchValue());notify('Deleted');
       // Delete from Supabase so it disappears for all users
       if(sbUser){
         try{await sb.from('projects').delete().eq('id',id);}catch(e){console.warn('Cloud delete failed:',e);}

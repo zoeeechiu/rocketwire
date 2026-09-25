@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>RocketWire</title>
   <link rel="stylesheet" href="css/styles.css">
+  <link rel="stylesheet" href="css/folders.css">
 </head>
 <body>
 <div id="topbar">
@@ -28,10 +29,11 @@
 <!-- HOME -->
 <div class="page" id="pg-home">
   <div class="home-hdr">
-    <div class="home-title">Projects</div>
+    <div class="home-title" id="home-path">Projects</div>
     <div style="display:flex;gap:9px;align-items:center">
-      <div class="srch"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#bbb" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input type="text" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" placeholder="Search projects…" oninput="renderHome(this.value)"></div>
-      <button class="btn btn-red" onclick="reqAuth(()=>openM('m-newproj'))">+ New Project</button>
+      <div class="srch"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#bbb" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><input type="text" id="home-search" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" placeholder="Search projects…" oninput="renderHome(this.value)"></div>
+      <button class="btn btn-ol" onclick="reqAuth(()=>openNewFolder())">+ Folder</button>
+      <button class="btn btn-red" onclick="openNewProj()">+ New Project</button>
       <button class="btn btn-ol" onclick="reqAuth(()=>{loadFromCloud();notify('Syncing...','ok');})" title="Sync from cloud">↻ Sync</button>
     </div>
   </div>
@@ -187,7 +189,21 @@
   <div class="modal"><h2>New project</h2><div class="msub">Start a fresh wiring project.</div>
     <div class="mf"><label>Project name</label><input id="np-name" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" placeholder="e.g. 2026 Launch Vehicle" onkeydown="if(event.key==='Enter')createProj()"></div>
     <div class="mf"><label>Description (optional)</label><input id="np-desc" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" placeholder="Short description"></div>
+    <div class="mf"><label>Folder</label><select id="np-folder"></select></div>
     <div class="mbtns"><button class="btn btn-gh" onclick="closeM('m-newproj')">Cancel</button><button class="btn btn-red" onclick="createProj()">Create</button></div>
+  </div>
+</div>
+<div class="mbg" id="m-folder" style="display:none">
+  <div class="modal"><h2 id="mf-title">New folder</h2><div class="msub">Organize projects into folders. Folders can contain other folders.</div>
+    <div class="mf"><label>Folder name</label><input id="mf-name" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" placeholder="e.g. Avionics" onkeydown="if(event.key==='Enter')doFolderModal()"></div>
+    <div class="mf" id="mf-loc-wrap"><label>Location</label><select id="mf-loc"></select></div>
+    <div class="mbtns"><button class="btn btn-gh" onclick="closeM('m-folder')">Cancel</button><button class="btn btn-red" id="mf-ok" onclick="doFolderModal()">Create</button></div>
+  </div>
+</div>
+<div class="mbg" id="m-move" style="display:none">
+  <div class="modal"><h2 id="mv-title">Move</h2><div class="msub">Choose where to put it.</div>
+    <div class="mf"><label>Move to</label><select id="mv-dest"></select></div>
+    <div class="mbtns"><button class="btn btn-gh" onclick="closeM('m-move')">Cancel</button><button class="btn btn-red" onclick="doMove()">Move</button></div>
   </div>
 </div>
 <div class="mbg" id="m-wirelen" style="display:none">
@@ -279,6 +295,7 @@
   <script src="js/storage.js?v=1783795784"></script>
   <script src="js/undo.js?v=1783795784"></script>
   <script src="js/pages/home.js?v=1783795784"></script>
+  <script src="js/folders.js?v=1783795784"></script>
   <script src="js/canvas/routing.js?v=1783795784"></script>
   <script src="js/canvas/draw.js?v=1783795784"></script>
   <script src="js/canvas/events.js?v=1783795784"></script>

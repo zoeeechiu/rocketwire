@@ -1,0 +1,19 @@
+/* ── FOLDERS (home page) ── */
+/* Path above the grid: Projects › Avionics › 2026 */
+#home-path{display:flex;align-items:center;gap:4px;flex-wrap:wrap;min-width:0}
+.hp-crumb{background:none;border:none;font:inherit;color:#aaa;cursor:pointer;padding:2px 6px;border-radius:6px;transition:all .15s}
+.hp-crumb:hover{color:#c0392b;background:#fceae8}
+.hp-crumb.cur{color:#1a1a2e;cursor:default;padding-left:2px}
+#home-path .hp-crumb:first-child{padding-left:0}
+.hp-sep{color:#d0d3d8;font-weight:400}
+
+/* Folder cards: amber icon tile so they read differently from projects */
+.pfolder.ficon{background:#fff4d6}
+.pcard.fcard:hover{border-color:#d4a017;box-shadow:0 3px 14px rgba(212,160,23,.12)}
+
+/* "No results" message inside the grid */
+.home-empty{grid-column:1/-1;color:#aaa;font-size:12px;padding:24px 2px}
+
+/* Modal <select>s match the text inputs */
+.mf select{background:#fff;cursor:pointer}
+.mf select:focus{border-color:#c0392b}
