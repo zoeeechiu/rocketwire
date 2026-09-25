@@ -123,24 +123,48 @@ function redraw(){
       // Plain wire (or a same-type splice's stem wire, which mirrors its
       // stem 1:1 so this degenerates to the same thing): pin position is
       // connector-local, so cA's channel at index i and cB's channel at
-      // index i are NOT necessarily the same net. Build the list by NAME —
-      // the union of every named channel on either side, deduplicated —
+      // index i are NOT necessarily the same net. Build the list by NAME
       // instead of merging position-for-position, so the same net at
       // different pin numbers on each connector renders as ONE wire
       // segment, not two. Colors already stay in sync by name via
       // syncNetColors, so either side's color for a given name is correct.
-      const byName=new Map();
-      cA.channels.forEach((name,i)=>{if(name&&!byName.has(name))byName.set(name,cA.colors[i]||'red');});
-      cB.channels.forEach((name,i)=>{if(name&&!byName.has(name))byName.set(name,cB.colors[i]||'red');});
-      let allowedNames=null;
+      //
+      // Match by NAME, but keep COUNT. A Map keyed by name collapses
+      // duplicates, so two "24V" pins used to become one wire. Instead,
+      // record every occurrence per name on each side. A name that appears
+      // k times on cA and m times on cB is max(k,m) physical conductors
+      // (e.g. 24V on pins 3 and 5 of both ends = 2 wires, not 1). The j-th
+      // "24V" on one side pairs with the j-th "24V" on the other.
+      const occA=new Map(),occB=new Map(),nameOrder=[];
+      const addOcc=(m,name,col)=>{
+        if(!m.has(name))m.set(name,[]);
+        m.get(name).push(col);
+        if(!nameOrder.includes(name))nameOrder.push(name);
+      };
+      cA.channels.forEach((name,i)=>{if(name)addOcc(occA,name,cA.colors[i]||'red');});
+      cB.channels.forEach((name,i)=>{if(name)addOcc(occB,name,cB.colors[i]||'red');});
+      // Same-type splice stem wire: usedChannelIndices are STEM-side pin
+      // indices (set in commitSplice). Count them per name, so a splice that
+      // takes only ONE of two 24V pins draws one 24V wire, not both.
+      let allowedCount=null;
       if(wire.usedChannelIndices&&wire.usedChannelIndices.length>0){
-        // Stem wire for a same-type splice: usedChannelIndices are STEM-side
-        // pin indices (set in commitSplice) — convert to names to filter by.
-        allowedNames=new Set(wire.usedChannelIndices.map(idx=>cA.channels[idx]).filter(Boolean));
+        allowedCount=new Map();
+        wire.usedChannelIndices.forEach(idx=>{
+          const nm=cA.channels[idx];
+          if(nm)allowedCount.set(nm,(allowedCount.get(nm)||0)+1);
+        });
       }
-      namedChansToDraw=[...byName.entries()]
-        .filter(([name])=>allowedNames===null||allowedNames.has(name))
-        .map(([ch,col],idx)=>({ch,col:WHX[col]||'#c0392b',i:idx}));
+      namedChansToDraw=[];
+      nameOrder.forEach(name=>{
+        const a=occA.get(name)||[],b=occB.get(name)||[];
+        let count=Math.max(a.length,b.length);
+        if(allowedCount!==null)count=Math.min(count,allowedCount.get(name)||0);
+        for(let k=0;k<count;k++){
+          // Prefer cA's color for this occurrence, else cB's
+          const col=a[k]||b[k]||'red';
+          namedChansToDraw.push({ch:name,col:WHX[col]||'#c0392b',i:namedChansToDraw.length});
+        }
+      });
     }
 
     if(showCh&&nPinsMerge>0){
