@@ -94,12 +94,23 @@ function redraw(){
       // keeps working correctly even if the child's own pin arrangement
       // changes later — the wire "follows" the channel, not a raw index.
       branchChansToDraw=[];
+      // Child pins already claimed by an earlier mapping on this wire, so
+      // two "GND" routings land on the child's 1st and 2nd GND pins (each
+      // with its own color) instead of both resolving to the first one.
+      const claimedChild=new Set();
+      const findChildPin=name=>{
+        for(let k=0;k<cB.channels.length;k++){
+          if(cB.channels[k]===name&&!claimedChild.has(k))return k;
+        }
+        return cB.channels.indexOf(name); // all taken: reuse first match
+      };
       cA.channelMap.forEach((mappings,chIdx)=>{
         const mapped=Array.isArray(mappings)?mappings:[mappings];
         const m=mapped.find(mm=>mm&&mm.connId===cB.id);
         if(!m)return;
         const storedName=m.chName||cA.channels[chIdx]||'';
-        let childIdx=storedName?cB.channels.indexOf(storedName):-1;
+        let childIdx=storedName?findChildPin(storedName):-1;
+        if(childIdx>=0)claimedChild.add(childIdx);
         // If the stored name doesn't match anything on the child (e.g. the
         // child's channel was renamed since this mapping was made), fall
         // back to the child's own channel — if it has exactly one named

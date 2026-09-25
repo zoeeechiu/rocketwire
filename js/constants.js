@@ -2,10 +2,6 @@
 // CONSTANTS
 // ═══════════════════════════════════════════════════════
 const CREDS = {user:'rocketteam',pass:'launch2026'};
-// Email of a real Supabase user (Dashboard > Authentication > Users) that the
-// shared "rocketteam" login signs in as, so that login can push/sync. Use the
-// same password as CREDS.pass. Leave '' to keep rocketteam local-only.
-const TEAM_SUPABASE_EMAIL = '';
 const WC = ['red','black','yellow','blue','green','orange','gray','purple','white','brown','pink','cyan'];
 const WHX = {red:'#e74c3c',black:'#2c2c2c',yellow:'#f1c40f',blue:'#2980b9',green:'#27ae60',orange:'#e67e22',gray:'#95a5a6',purple:'#8e44ad',white:'#bdc3c7',brown:'#795548',pink:'#e91e63',cyan:'#00bcd4'};
 const AUTO_PINS = {'Amphenol 9-35':6,'Amphenol 13-pin':13,'Amphenol 9-98':3,'XT60':2,'XT30':2,'DSUB-9':9,'DSUB-15':15,'DSUB-37':37};
@@ -56,19 +52,54 @@ function collectAllConnectors(node, out){
   return out;
 }
 
+// Work out where each OLD pin index went in the NEW channel list, matching
+// by name, with support for DUPLICATE names (two "GND" pins, two "24V"...).
+// Returns remap[oldIdx] = newIdx, or -1 if that channel no longer exists.
+//
+// The previous approach was `newIndexByName[name]` = FIRST index with that
+// name. With duplicates, every "GND" mapped to the first GND pin, so two
+// channelMap entries landed on the same slot, one overwrote the other,
+// and that branch wire vanished, even on a save that only changed a color.
+//
+// Two passes, so a pin that didn't move can never be "stolen" by another:
+//   1) A pin whose name is still at the same index stays put. This makes
+//      a color-only save an exact identity mapping.
+//   2) Remaining old pins claim the remaining new pins of the same name,
+//      in order: the j-th leftover "GND" goes to the j-th free "GND".
+function makeChannelRemap(oldChannels, newChannels){
+  oldChannels=oldChannels||[];newChannels=newChannels||[];
+  const remap=new Array(oldChannels.length).fill(-1);
+  const claimed=new Set();
+  oldChannels.forEach((name,i)=>{
+    if(name&&newChannels[i]===name){remap[i]=i;claimed.add(i);}
+  });
+  const freeByName={};
+  newChannels.forEach((name,i)=>{
+    if(name&&!claimed.has(i))(freeByName[name]=freeByName[name]||[]).push(i);
+  });
+  oldChannels.forEach((name,i)=>{
+    if(!name||remap[i]>=0)return;
+    const q=freeByName[name];
+    if(q&&q.length)remap[i]=q.shift();
+  });
+  return remap;
+}
+
 // Remap a splice's channelMap so each existing routing "follows" its channel
 // by NAME rather than staying pinned to a now-stale index. Used whenever a
 // splice's own channels array gets reordered (directly, or via stem mirror).
 function remapChannelMapByName(splice, oldChannels, newChannels){
   if(!splice.channelMap)return;
-  const newIndexByName={};
-  newChannels.forEach((name,i)=>{if(name&&newIndexByName[name]===undefined)newIndexByName[name]=i;});
+  const remap=makeChannelRemap(oldChannels,newChannels);
   const newMap=Array.from({length:newChannels.length},()=>null);
   splice.channelMap.forEach((mappings,oldIdx)=>{
     if(!Array.isArray(mappings)||!mappings.some(m=>m&&m.connId))return;
-    const name=oldChannels[oldIdx];
-    const targetIdx=(name&&newIndexByName[name]!==undefined)?newIndexByName[name]:oldIdx;
-    if(targetIdx>=0&&targetIdx<newMap.length)newMap[targetIdx]=mappings.map(m=>({...m}));
+    const targetIdx=remap[oldIdx]>=0?remap[oldIdx]:oldIdx;
+    if(targetIdx<0||targetIdx>=newMap.length)return;
+    const copy=mappings.map(m=>({...m}));
+    // Never silently overwrite: if two routings end up on one pin (only
+    // possible via the fallback path), keep both instead of dropping one.
+    newMap[targetIdx]=newMap[targetIdx]?[...newMap[targetIdx],...copy]:copy;
   });
   for(let i=0;i<newMap.length;i++){if(!newMap[i])newMap[i]=[{connId:'',chName:''}];}
   splice.channelMap=newMap;
@@ -86,6 +117,8 @@ function remapChannelMapByName(splice, oldChannels, newChannels){
 // splice being edited directly (e.g. via double-click, not the splice page).
 function resyncSpliceRelationships(conn, oldChannels, oldColors){
   const sc=scope();if(!sc)return;
+  // Duplicate-name-aware old→new pin index map for THIS connector
+  const stemRemap=makeChannelRemap(oldChannels,conn.channels);
   const stemSplices=sc.connectors.filter(c=>c.isSplice&&c.stemFromId===conn.id);
   stemSplices.forEach(splice=>{
     const stemWire=sc.wires.find(w=>w.spliceConnId===splice.id);
@@ -97,20 +130,16 @@ function resyncSpliceRelationships(conn, oldChannels, oldColors){
       if(stemWire){
         const newUsed=new Set();
         (stemWire.usedChannelIndices||[]).forEach(oldIdx=>{
-          const name=oldChannels[oldIdx];
-          if(!name)return;
-          const newIdx=conn.channels.indexOf(name);
-          if(newIdx>=0)newUsed.add(newIdx);
+          const newIdx=stemRemap[oldIdx];
+          if(newIdx!==undefined&&newIdx>=0)newUsed.add(newIdx);
         });
         stemWire.usedChannelIndices=[...newUsed];
       }
     } else {
       splice.stemChannelMap=splice.stemChannelMap.map((stemIdx,pinIdx)=>{
         if(stemIdx===null||stemIdx===undefined)return stemIdx;
-        const name=oldChannels[stemIdx];
-        if(!name)return stemIdx;
-        const newIdx=conn.channels.indexOf(name);
-        if(newIdx<0)return stemIdx;
+        const newIdx=stemRemap[stemIdx];
+        if(newIdx===undefined||newIdx<0)return stemIdx;
         splice.channels[pinIdx]=conn.channels[newIdx];
         splice.colors[pinIdx]=conn.colors[newIdx]||'red';
         return newIdx;
@@ -191,7 +220,7 @@ const PINOUTS = {
     {id:12,dx:-13,  dy:22.5},
     ]},
   // DSUB-9: horizontal, 2 staggered rows. Top row (5 pins): 1-5 right-to-left. Bottom (4 pins): 6-9 right-to-left
-  // From image: top row pins right-to-left = 1,6,2,7,3,8,4,9,5 alternating? 
+  // From image: top row pins right-to-left = 1,6,2,7,3,8,4,9,5 alternating?
   // Image shows bottom numbers: 5,9,4,8,3,7,2,6,1 left-to-right
   // So left-to-right bottom positions: 5(top),9(bot),4(top),8(bot),3(top),7(bot),2(top),6(bot),1(top)
   // Top row (pins 1,2,3,4,5): positions at x = 44,22,0,-22,-44 (right to left = 1..5)
