@@ -36,6 +36,61 @@ window.addEventListener('resize',()=>{
 });
 
 // ═══════════════════════════════════════════════════════
+// DEMO PROJECT REMOVAL
+// ═══════════════════════════════════════════════════════
+// The old boot() seeded a demo project (id 'p_demo') on every browser that
+// had never run RocketWire before. Deleting it on one device and pushing
+// removed the cloud row, but:
+//   1) each NEW device seeded a fresh copy locally on first launch, and
+//   2) the next Push from any device uploaded its local copy again.
+// Push re-uploads every local project, so a single device that still had
+// the demo was enough to bring it back for everyone.
+//
+// Fix: never seed it (removed from boot below), and actively remove it,
+// locally AND from the cloud, at boot and after every Sync / Push. The
+// cleanup after Sync/Push covers teammates still running old cached code
+// who push it back up once more. Only the exact id 'p_demo' is removed, so
+// your real projects (including any Copy you made of the demo, which gets
+// a new id) are never touched.
+const DEMO_PROJECT_ID='p_demo';
+
+async function purgeDemoProject(){
+  const had=ST.projects.some(p=>p.id===DEMO_PROJECT_ID);
+  if(had){
+    ST.projects=ST.projects.filter(p=>p.id!==DEMO_PROJECT_ID);
+    if(activeProjId===DEMO_PROJECT_ID){
+      activeProjId=null;navStack=[];
+      try{localStorage.removeItem('rw3_proj');}catch(e){}
+      if(currentPage!=='pg-home')goPage('pg-home');
+    }
+    try{localStorage.setItem('rw3',JSON.stringify(ST));}catch(e){}
+    if(currentPage==='pg-home')renderHome(document.getElementById('home-search')?.value||'');
+  }
+  // Delete the cloud row too; a no-op if it isn't there
+  if(sbUser){
+    try{await sb.from('projects').delete().eq('id',DEMO_PROJECT_ID);}
+    catch(e){console.warn('Demo cloud cleanup failed:',e);}
+  }
+}
+
+const _loadFromCloudKeepDemo=loadFromCloud;
+loadFromCloud=async function(){
+  const r=await _loadFromCloudKeepDemo.apply(this,arguments);
+  await purgeDemoProject();
+  return r;
+};
+const _pushChangesKeepDemo=pushChanges;
+pushChanges=async function(){
+  // Remove it BEFORE pushing so this device never uploads it…
+  ST.projects=ST.projects.filter(p=>p.id!==DEMO_PROJECT_ID);
+  const r=await _pushChangesKeepDemo.apply(this,arguments);
+  // …and AFTER, because Push merges cloud rows back in (another device may
+  // have just re-uploaded it) and then writes them all back up.
+  await purgeDemoProject();
+  return r;
+};
+
+// ═══════════════════════════════════════════════════════
 // BOOT
 // ═══════════════════════════════════════════════════════
 async function boot() {
@@ -52,6 +107,10 @@ async function boot() {
   } else if (ST.isLoggedIn) {
     applyLogin();
   }
+
+  // Drop the old demo project, locally and from the cloud, before anything
+  // below can reopen or render it.
+  await purgeDemoProject();
 
   // Restore last page state — only reopen project if user was actually on canvas
   const savedPage = localStorage.getItem('rw3_page') || 'pg-home';
@@ -82,41 +141,7 @@ async function boot() {
     goPage('pg-home');
   }
   renderHome();
-
-  // Seed demo on first launch only. Checking just `!ST.projects.length` was
-  // wrong: it re-seeds every time the list is empty for ANY reason,
-  // including a user deliberately deleting everything (their own projects,
-  // or this demo itself) -- it would just keep coming back. A separate
-  // one-time flag in localStorage distinguishes "never launched before"
-  // from "currently has zero projects".
-  let everLaunched=false;
-  try { everLaunched = !!localStorage.getItem('rw3_seeded'); } catch(e) {}
-  if (!ST.projects.length && !everLaunched) {
-    const demo = {
-      id: 'p_demo', name: '2025-2026 Launch Vehicle', desc: 'Demo project',
-      systems: [
-        {id:'s1',name:'AV Bay',x:80,y:140,w:260,h:100,systems:[{id:'s1a',name:'FWD Board',x:40,y:80,w:240,h:100,systems:[],connectors:[],wires:[],splices:[]}],connectors:[],wires:[],splices:[]},
-        {id:'s2',name:'Flight Computer',x:440,y:110,w:270,h:100,systems:[],connectors:[],wires:[],splices:[]},
-        {id:'s3',name:'Power Board',x:440,y:300,w:260,h:100,systems:[],connectors:[],wires:[],splices:[]},
-        {id:'s4',name:'Pyro Board',x:800,y:200,w:250,h:100,systems:[],connectors:[],wires:[],splices:[]},
-      ],
-      connectors: [
-        {id:'c1',systemId:'s1',type:'Amphenol 9-35',customName:'',pins:6,channels:['15V','GND','SIG1','SIG2','PWR','RTN'],colors:['red','black','yellow','yellow','red','black'],num:1},
-        {id:'c2',systemId:'s2',type:'Amphenol 9-35',customName:'',pins:6,channels:['15V','GND','SIG1','SIG2','PWR','RTN'],colors:['red','black','yellow','yellow','red','black'],num:2},
-        {id:'c3',systemId:'s3',type:'XT60',customName:'',pins:2,channels:['V+','GND'],colors:['red','black'],num:3},
-        {id:'c4',systemId:'s2',type:'XT60',customName:'',pins:2,channels:['V+','GND'],colors:['red','black'],num:4},
-        {id:'c5',systemId:'s2',type:'Molex',customName:'',pins:4,channels:['Fire1','Fire2','ARM','GND'],colors:['orange','orange','yellow','black'],num:5},
-        {id:'c6',systemId:'s4',type:'Molex',customName:'',pins:4,channels:['Fire1','Fire2','ARM','GND'],colors:['orange','orange','yellow','black'],num:6},
-      ],
-      wires: [
-        {id:'w1',fromConn:'c1',toConn:'c2',length:18},
-        {id:'w2',fromConn:'c3',toConn:'c4',length:12},
-        {id:'w3',fromConn:'c5',toConn:'c6',length:24},
-      ],
-      splices: []
-    };
-    ST.projects.push(demo); save(); renderHome();
-  }
-  try { localStorage.setItem('rw3_seeded', '1'); } catch(e) {}
+  // (Demo project seeding removed: new devices now start with an empty
+  // project list, or whatever Sync pulls from your account.)
 }
 boot();
