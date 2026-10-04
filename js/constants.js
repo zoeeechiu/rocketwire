@@ -8,9 +8,9 @@ const CREDS = {user:'rocketteam',pass:'launch2026'};
 const TEAM_SUPABASE_EMAIL = '';
 const WC = ['red','black','yellow','blue','green','orange','gray','purple','white','brown','pink','cyan'];
 const WHX = {red:'#e74c3c',black:'#2c2c2c',yellow:'#f1c40f',blue:'#2980b9',green:'#27ae60',orange:'#e67e22',gray:'#95a5a6',purple:'#8e44ad',white:'#bdc3c7',brown:'#795548',pink:'#e91e63',cyan:'#00bcd4'};
-const AUTO_PINS = {'Amphenol 9-35':6,'Amphenol 13-pin':13,'Amphenol 9-98':3,'XT60':2,'XT30':2,'DSUB-9':9,'DSUB-15':15,'DSUB-37':37};
+const AUTO_PINS = {'Amphenol 9-35':6,'Amphenol 13-pin':13,'Amphenol 9-98':3,'XT60':2,'XT30':2,'DSUB-9':9,'DSUB-15':15,'DSUB-25':25,'DSUB-37':37};
 // Connectors where user cannot change pin count
-const FIXED_PINS = new Set(['Amphenol 9-35','Amphenol 13-pin','Amphenol 9-98','XT60','XT30','DSUB-9','DSUB-15','DSUB-37']);
+const FIXED_PINS = new Set(['Amphenol 9-35','Amphenol 13-pin','Amphenol 9-98','XT60','XT30','DSUB-9','DSUB-15','DSUB-25','DSUB-37']);
 const PAD = 20; // collision padding around boxes
 const GRID = 14; // routing grid cell size (world units)
 
@@ -240,6 +240,14 @@ const PINOUTS = {
     {id:9,dx:96,dy:16},{id:10,dx:64,dy:16},{id:11,dx:32,dy:16},{id:12,dx:0,dy:16},
     {id:13,dx:-32,dy:16},{id:14,dx:-64,dy:16},{id:15,dx:-96,dy:16}
   ]},
+  // DSUB-25: matches the photo — 13-pin row on the bottom, 12-pin row on top.
+  // Pins 1-13 on the long row and 14-25 on the short row, both numbered right-to-left.
+  'DSUB-25':{shape:'dsub_h',W:340,H:72,fixedPins:25,pins:(()=>{
+    const p=[], sp=26, longN=13, shortN=12;
+    for(let i=0;i<longN;i++) p.push({id:i+1,dx:((longN-1)/2-i)*sp,dy:16});
+    for(let i=0;i<shortN;i++) p.push({id:i+longN+1,dx:((shortN-1)/2-i)*sp,dy:-16});
+    return p;
+  })()},
   // DSUB-37: larger with clear 26px pin spacing
   'DSUB-37':{shape:'dsub_h',W:500,H:72,fixedPins:37,pins:(()=>{
     const p=[];

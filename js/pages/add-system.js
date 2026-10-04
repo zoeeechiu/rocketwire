@@ -59,6 +59,7 @@ function renderAddForm(){
         <option value="Amphenol 9-98">Amphenol 9-98 (3-pin)</option>
         <option value="DSUB-9">D-SUB 9</option>
         <option value="DSUB-15">D-SUB 15</option>
+        <option value="DSUB-25">D-SUB 25</option>
         <option value="DSUB-37">D-SUB 37</option>
         <option value="Molex">Molex</option>
         <option value="XT60">XT60</option>
