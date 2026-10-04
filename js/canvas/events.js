@@ -282,6 +282,7 @@ function renameSystem(sys){
   if(liveEntry)liveEntry.label=trimmed;
   save();redraw();buildBC(currentPage);notify('System renamed','ok');
 }
+let connClipboard=null;
 function onCtx(e){
   e.preventDefault();
   const r=cv.getBoundingClientRect();
@@ -301,6 +302,7 @@ function onCtx(e){
     } else {
       items.push({label:'Convert to splice',icon:'✂️',fn:()=>reqAuth(()=>openSplicePage(null,0,0,true,conn.id))});
     }
+    items.push({label:'Copy',icon:'📋',fn:()=>{connClipboard=JSON.parse(JSON.stringify(conn));notify('Connector copied');}});
     // Allow user to pin the connector to a specific edge
     const curEdge=conn._pinnedEdge||conn._edge||'auto';
     items.push({divider:true});
@@ -350,6 +352,13 @@ function onCtx(e){
         sc.connectors.push({id:cid,systemId:sys.id,type:'Amphenol 9-35',customName:'',pins:6,channels:Array(6).fill(''),colors:Array(6).fill('red'),num});
         save();redraw();activeConnId=cid;goPage('pg-conn');notify('Connector added');
       })},
+      ...(connClipboard?[{label:'Paste connector',icon:'📋',fn:()=>reqAuth(()=>{
+        const cid='c'+Date.now();
+        const copy=JSON.parse(JSON.stringify(connClipboard));
+        delete copy._edge;delete copy._pinnedEdge;
+        sc.connectors.push({...copy,id:cid,systemId:sys.id,num:sc.connectors.length+1});
+        save();redraw();notify('Connector pasted');
+      })}]:[]),
       {divider:true},
       {label:'Delete system',icon:'🗑',danger:true,fn:()=>reqAuth(()=>{
         if(!confirm(`Delete "${sys.name}"?`))return;
