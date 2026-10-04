@@ -192,6 +192,15 @@ function redraw(){
           .filter(({i})=>activeIdxSet===null||activeIdxSet.has(i));
       }
       chansToDraw=chansToDraw.filter(({ch})=>ch); // unlabeled channels aren't drawn at all
+      // Bundle same-named nets into ONE line carrying a bus-style count
+      {
+        const byName=new Map();
+        chansToDraw.forEach(c=>{
+          const g=byName.get(c.ch);
+          if(g)g.count++;else byName.set(c.ch,{...c,count:1});
+        });
+        chansToDraw=[...byName.values()];
+      }
       const n=chansToDraw.length;
       if(n===0){
         // Branch wire with no mapped channels — draw thin gray placeholder
@@ -211,7 +220,7 @@ function redraw(){
       const mx1=bpt(sA.x,c1.x,c2.x,sB.x,0.51),my1=bpt(sA.y,c1.y,c2.y,sB.y,0.51);
       const tangAngle=Math.atan2(my1-my0,mx1-mx0);
 
-      chans.forEach(({ch,col,i},drawIdx)=>{
+      chans.forEach(({ch,col,i,count},drawIdx)=>{
         const off=(drawIdx-(n-1)/2)*spreadW;
         const cpOx=perpX*off*cam.scale,cpOy=perpY*off*cam.scale;
         ctx.save();
@@ -225,6 +234,17 @@ function redraw(){
           sB.x, sB.y
         );
         ctx.stroke();
+        // Bundle count: "X2" centered on the wire with a translucent backing
+        if(count>1){
+          const bx=bpt(sA.x,c1.x+cpOx,c2.x+cpOx,sB.x,0.25),by=bpt(sA.y,c1.y+cpOy,c2.y+cpOy,sB.y,0.25);
+          const nfs=12*cam.scale,ntxt='X'+count;
+          ctx.font=`700 ${nfs}px -apple-system,sans-serif`;
+          const ntw=ctx.measureText(ntxt).width+4*cam.scale,nth=nfs+2*cam.scale;
+          ctx.fillStyle='rgba(255,255,255,.7)';
+          ctx.fillRect(bx-ntw/2,by-nth/2,ntw,nth);
+          ctx.fillStyle=col;ctx.textAlign='center';ctx.textBaseline='middle';
+          ctx.fillText(ntxt,bx,by);
+        }
         // Only show label if channel has a name
         if(ch){
           const lx=bpt(sA.x,c1.x+cpOx,c2.x+cpOx,sB.x,0.5);
