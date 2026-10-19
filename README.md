@@ -20,6 +20,10 @@ Open `index.html` in a browser. Your work is saved in the browser's local storag
 
 Cloud sync is optional and needs a Supabase project (see below). Without it you can still use the app locally with the offline login.
 
+## User guide
+
+**[RocketWire-User-Guide.pdf](RocketWire-User-Guide.pdf)**: a step-by-step guide with screenshots for everyone using the tool. It covers Sync and Push, projects and folders, canvas controls, undo / redo, systems and subsystems, connectors, splices, bundled nets and exports.
+
 ## Setup
 
 ### Set up your own copy with cloud sync
