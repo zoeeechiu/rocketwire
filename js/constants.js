@@ -6,8 +6,18 @@ const CREDS = {user:'rocketteam',pass:'launch2026'};
 // shared "rocketteam" login signs in as, so that login can push/sync. Use the
 // same password as CREDS.pass. Leave '' to keep rocketteam local-only.
 const TEAM_SUPABASE_EMAIL = '';
-const WC = ['red','black','yellow','blue','green','orange','gray','purple','white','brown','pink','cyan'];
-const WHX = {red:'#e74c3c',black:'#2c2c2c',yellow:'#f1c40f',blue:'#2980b9',green:'#27ae60',orange:'#e67e22',gray:'#95a5a6',purple:'#8e44ad',white:'#bdc3c7',brown:'#795548',pink:'#e91e63',cyan:'#00bcd4'};
+const WC = ['white','brown','green','yellow','gray','pink','blue','red','black','purple','gray-pink','red-blue','orange','cyan'];
+const WHX = {red:'#e74c3c',black:'#2c2c2c',yellow:'#f1c40f',blue:'#2980b9',green:'#27ae60',orange:'#e67e22',gray:'#6c757d',purple:'#8e44ad',white:'#aab0b6',brown:'#795548',pink:'#e91e63',cyan:'#00bcd4',
+  // Two-tone "candy cane" wires: WHX holds the first stripe color (used for labels and fallbacks)
+  'gray-pink':'#6c757d','red-blue':'#e74c3c'};
+// Second stripe color for the candy-cane wires, drawn as dashes over the first
+const WSTRIPE = {'gray-pink':'#e91e63','red-blue':'#2980b9'};
+// CSS background for a wire color name (striped for candy-cane wires)
+function wireCss(name){
+  return WSTRIPE[name]
+    ? `repeating-linear-gradient(135deg,${WHX[name]} 0 10px,${WSTRIPE[name]} 10px 20px)`
+    : (WHX[name]||'#fff');
+}
 const AUTO_PINS = {'Amphenol 9-35':6,'Amphenol 13-pin':13,'Amphenol 9-98':3,'XT60':2,'XT30':2,'DSUB-9':9,'DSUB-15':15,'DSUB-25':25,'DSUB-37':37};
 // Connectors where user cannot change pin count
 const FIXED_PINS = new Set(['Amphenol 9-35','Amphenol 13-pin','Amphenol 9-98','XT60','XT30','DSUB-9','DSUB-15','DSUB-25','DSUB-37']);

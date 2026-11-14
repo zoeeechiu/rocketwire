@@ -261,16 +261,16 @@ function renderChList(conn){
     const row=document.createElement('div');row.className='ch-row';
     row.innerHTML=`<div class="pnum">${i+1}</div>
       <input class="chinp" name="ch-name-${i}" autocomplete="off" readonly onfocus="this.removeAttribute('readonly')" value="${ch}" placeholder="e.g. GND" data-i="${i}">
-      <select class="colsel" data-i="${i}">${WC.map(c=>`<option value="${c}"${conn.colors[i]===c?' selected':''} style="background:${WHX[c]||'#fff'};color:${['black','purple','blue'].includes(c)?'#fff':'#222'}">${c}</option>`).join('')}</select>`;
+      <select class="colsel" data-i="${i}">${WC.map(c=>`<option value="${c}"${conn.colors[i]===c?' selected':''} style="background:${wireCss(c)};color:${['black','purple','blue','gray','gray-pink','red-blue'].includes(c)?'#fff':'#222'}">${c}</option>`).join('')}</select>`;
     row.querySelector('input').onchange=e=>{if(draftConn)draftConn.channels[+e.target.dataset.i]=e.target.value;checkWarn(draftConn||conn);};
     const sel=row.querySelector('select');
     // Set initial background color
-    sel.style.background=WHX[conn.colors[i]]||'#fff';
-    sel.style.color=(['black','purple','blue'].includes(conn.colors[i]))?'#fff':'#222';
+    sel.style.background=wireCss(conn.colors[i]);
+    sel.style.color=(['black','purple','blue','gray','gray-pink','red-blue'].includes(conn.colors[i]))?'#fff':'#222';
     sel.onchange=e=>{
       const idx=+e.target.dataset.i, val=e.target.value;
       if(draftConn)draftConn.colors[idx]=val;
-      e.target.style.background=WHX[val]||'#fff';
+      e.target.style.background=wireCss(val);
       e.target.style.color=(['black','purple','blue'].includes(val))?'#fff':'#222';
       redraw(); // preview — save on Save button
     };

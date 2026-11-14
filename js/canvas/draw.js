@@ -124,7 +124,7 @@ function redraw(){
         const name=childIdx>=0?cB.channels[childIdx]:storedName;
         if(!name)return;
         const col=childIdx>=0?(cB.colors[childIdx]||'red'):(cA.colors[chIdx]||'red');
-        branchChansToDraw.push({ch:name,col:WHX[col]||'#c0392b',i:chIdx});
+        branchChansToDraw.push({ch:name,col:WHX[col]||'#c0392b',colName:col,i:chIdx});
       });
     } else if(cB.isSplice&&Array.isArray(cB.stemChannelMap)){
       // Custom-type splice stem wire: cSrc is already the stem's own data
@@ -173,7 +173,7 @@ function redraw(){
         for(let k=0;k<count;k++){
           // Prefer cA's color for this occurrence, else cB's
           const col=a[k]||b[k]||'red';
-          namedChansToDraw.push({ch:name,col:WHX[col]||'#c0392b',i:namedChansToDraw.length});
+          namedChansToDraw.push({ch:name,col:WHX[col]||'#c0392b',colName:col,i:namedChansToDraw.length});
         }
       });
     }
@@ -188,7 +188,7 @@ function redraw(){
         const nPins=cSrc.pins||cSrc.channels.length;
         const allChans=Array.from({length:nPins},(_,i)=>cSrc.channels[i]||'');
         const activeIdxSet=activeChIndices?new Set(activeChIndices):null;
-        chansToDraw=allChans.map((ch,i)=>({ch,col:WHX[cSrc.colors[i]]||'#c0392b',i}))
+        chansToDraw=allChans.map((ch,i)=>({ch,col:WHX[cSrc.colors[i]]||'#c0392b',colName:cSrc.colors[i],i}))
           .filter(({i})=>activeIdxSet===null||activeIdxSet.has(i));
       }
       chansToDraw=chansToDraw.filter(({ch})=>ch); // unlabeled channels aren't drawn at all
@@ -220,7 +220,7 @@ function redraw(){
       const mx1=bpt(sA.x,c1.x,c2.x,sB.x,0.51),my1=bpt(sA.y,c1.y,c2.y,sB.y,0.51);
       const tangAngle=Math.atan2(my1-my0,mx1-mx0);
 
-      chans.forEach(({ch,col,i,count},drawIdx)=>{
+      chans.forEach(({ch,col,colName,i,count},drawIdx)=>{
         const off=(drawIdx-(n-1)/2)*spreadW;
         const cpOx=perpX*off*cam.scale,cpOy=perpY*off*cam.scale;
         ctx.save();
@@ -234,6 +234,14 @@ function redraw(){
           sB.x, sB.y
         );
         ctx.stroke();
+        // Candy-cane wire: dashes of the second color over the first
+        if(WSTRIPE[colName]){
+          ctx.strokeStyle=WSTRIPE[colName];
+          ctx.setLineDash([14*cam.scale,14*cam.scale]);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          ctx.strokeStyle=col;
+        }
         // Bundle count: "X2" centered on the wire with a translucent backing
         if(count>1){
           const bx=bpt(sA.x,c1.x+cpOx,c2.x+cpOx,sB.x,0.25),by=bpt(sA.y,c1.y+cpOy,c2.y+cpOy,sB.y,0.25);
