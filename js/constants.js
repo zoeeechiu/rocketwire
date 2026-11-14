@@ -6,12 +6,17 @@ const CREDS = {user:'rocketteam',pass:'launch2026'};
 // shared "rocketteam" login signs in as, so that login can push/sync. Use the
 // same password as CREDS.pass. Leave '' to keep rocketteam local-only.
 const TEAM_SUPABASE_EMAIL = '';
-const WC = ['white','brown','green','yellow','gray','pink','blue','red','black','purple','gray-pink','red-blue','orange','cyan'];
-const WHX = {red:'#e74c3c',black:'#2c2c2c',yellow:'#f1c40f',blue:'#2980b9',green:'#27ae60',orange:'#e67e22',gray:'#6c757d',purple:'#8e44ad',white:'#aab0b6',brown:'#795548',pink:'#e91e63',cyan:'#00bcd4',
+// Wire colors, in dropdown order. 'none' = no color assigned.
+const WC = ['none','black','brown','red','orange','yellow','green','blue','violet','gray','white','white-black','white-brown','white-red'];
+const WHX = {none:'#ffffff',black:'#2c2c2c',brown:'#795548',red:'#e74c3c',orange:'#e67e22',yellow:'#f1c40f',green:'#27ae60',blue:'#2980b9',violet:'#8e44ad',gray:'#6c757d',white:'#aab0b6',
   // Two-tone "candy cane" wires: WHX holds the first stripe color (used for labels and fallbacks)
-  'gray-pink':'#6c757d','red-blue':'#e74c3c'};
+  'white-black':'#aab0b6','white-brown':'#aab0b6','white-red':'#aab0b6',
+  // Older names no longer offered in the dropdown, kept so existing projects still draw
+  purple:'#8e44ad',pink:'#e91e63',cyan:'#00bcd4','gray-pink':'#6c757d','red-blue':'#e74c3c'};
 // Second stripe color for the candy-cane wires, drawn as dashes over the first
-const WSTRIPE = {'gray-pink':'#e91e63','red-blue':'#2980b9'};
+const WSTRIPE = {'white-black':'#2c2c2c','white-brown':'#795548','white-red':'#e74c3c','gray-pink':'#e91e63','red-blue':'#2980b9'};
+// Dropdown colors dark enough to need white text
+const WDARK = new Set(['black','brown','blue','violet','gray','purple','gray-pink','red-blue']);
 // CSS background for a wire color name (striped for candy-cane wires)
 function wireCss(name){
   return WSTRIPE[name]
